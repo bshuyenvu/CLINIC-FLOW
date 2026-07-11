@@ -3,8 +3,9 @@ export type Priority = 'high' | 'medium' | 'low';
 export interface Task {
   id: string;
   title: string;
-  duration: number; // in minutes
-  deadline: string; // "YYYY-MM-DD" or relative descriptive date
+  startTime: string; // "HH:MM" - Bắt buộc
+  endTime?: string;  // "HH:MM" - Không bắt buộc
+  date: string;      // "YYYY-MM-DD" - Ngày/Tháng/Năm công việc thay thế hạn chót
   priority: Priority;
   category: string; // e.g., "Học tập", "Công việc", "Sức khỏe", "Cá nhân"
   notes?: string;

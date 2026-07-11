@@ -1,7 +1,8 @@
-import { Task, ScheduleItem, OptimizationSuggestion, UserPreferences, Priority } from '../types';
+import { Task, ScheduleItem, OptimizationSuggestion, UserPreferences } from '../types';
 
 // Convert "HH:MM" string to minutes from midnight
 export function timeToMinutes(timeStr: string): number {
+  if (!timeStr) return 0;
   const [hours, minutes] = timeStr.split(':').map(Number);
   if (isNaN(hours) || isNaN(minutes)) return 0;
   return hours * 60 + minutes;
@@ -15,6 +16,18 @@ export function minutesToTime(totalMinutes: number): string {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 }
 
+// Calculate duration in minutes for a task dynamically
+export function getTaskDuration(task: Task): number {
+  if (task.startTime && task.endTime) {
+    const startMins = timeToMinutes(task.startTime);
+    const endMins = timeToMinutes(task.endTime);
+    if (endMins > startMins) {
+      return endMins - startMins;
+    }
+  }
+  return 60; // Default to 60 minutes if end time is not specified
+}
+
 export function localScheduler(tasks: Task[], preferences: UserPreferences): {
   schedule: ScheduleItem[];
   suggestions: OptimizationSuggestion[];
@@ -23,148 +36,208 @@ export function localScheduler(tasks: Task[], preferences: UserPreferences): {
   const schedule: ScheduleItem[] = [];
   const suggestions: OptimizationSuggestion[] = [];
 
-  // 1. Sort the tasks based on preference focusStyle
-  const sortedTasks = preferences.showCompletedInSchedule !== false
-    ? [...tasks]
-    : [...tasks].filter(t => !t.completed);
-  
-  if (preferences.focusStyle === 'priority') {
-    // Sort High -> Medium -> Low
-    const priorityWeight = { high: 3, medium: 2, low: 1 };
-    sortedTasks.sort((a, b) => priorityWeight[b.priority] - priorityWeight[a.priority]);
-  } else if (preferences.focusStyle === 'deadline') {
-    // Sort by deadline (closest first)
-    sortedTasks.sort((a, b) => {
-      if (!a.deadline) return 1;
-      if (!b.deadline) return -1;
-      return a.deadline.localeCompare(b.deadline);
-    });
-  } else if (preferences.focusStyle === 'energy') {
-    // High duration / high priority first for morning, shorter / low priority for later
-    const getEnergyScore = (t: Task) => {
-      let score = t.duration;
-      if (t.priority === 'high') score += 120;
-      if (t.priority === 'medium') score += 60;
-      return score;
-    };
-    sortedTasks.sort((a, b) => getEnergyScore(b) - getEnergyScore(a));
-  }
-
-  // 2. Schedule settings
-  let currentTime = timeToMinutes(preferences.wakeUpTime);
-  const sleepTime = timeToMinutes(preferences.sleepTime);
-  
-  const lunchStart = timeToMinutes('12:00');
-  const lunchDuration = 60; // 1 hour lunch
-  const dinnerStart = timeToMinutes('18:30');
-  const dinnerDuration = 60; // 1 hour dinner
-
-  let consecutiveWorkMinutes = 0;
-  let itemIdCounter = 1;
-  const nextId = () => `item_${itemIdCounter++}`;
-
-  // Helper to add schedule item
-  const addItem = (activity: string, duration: number, type: ScheduleItem['type'], taskId: string | null = null, description = '') => {
-    const startStr = minutesToTime(currentTime);
-    const endStr = minutesToTime(currentTime + duration);
-    schedule.push({
-      id: nextId(),
-      timeSlot: `${startStr} - ${endStr}`,
-      startTime: startStr,
-      endTime: endStr,
-      activity,
-      type,
-      taskId,
-      duration,
-      description
-    });
-    currentTime += duration;
-  };
+  // Standard fixed circadian blocks
+  const fixedBlocks: { activity: string; startTime: string; endTime: string; type: ScheduleItem['type']; description: string }[] = [];
 
   // A. Morning routine
-  if (currentTime < lunchStart) {
-    const routineDuration = 45; // 45 mins morning prep
-    addItem('Chuẩn bị & Ăn sáng lành mạnh', routineDuration, 'routine', null, 'Y học lối sống khuyên dùng bữa sáng giàu protein & chất xơ, tiếp xúc ánh sáng mặt trời 15 phút để điều hòa nhịp sinh học Cortisol.');
-  }
+  fixedBlocks.push({
+    activity: 'Chuẩn bị & Ăn sáng lành mạnh',
+    startTime: preferences.wakeUpTime,
+    endTime: minutesToTime(timeToMinutes(preferences.wakeUpTime) + 45),
+    type: 'routine',
+    description: 'Y học lối sống khuyên dùng bữa sáng giàu protein & chất xơ, tiếp xúc ánh sáng mặt trời 15 phút để điều hòa nhịp sinh học Cortisol.'
+  });
 
-  // B. Loop over tasks and schedule them
-  for (const task of sortedTasks) {
-    // Check if we need to insert Lunch
-    if (currentTime < lunchStart && (currentTime + task.duration) > lunchStart) {
-      // Add lunch first
-      const gap = lunchStart - currentTime;
-      if (gap > 10) {
-        addItem('Hoàn tất việc dở dang / Chuẩn bị nghỉ trưa', gap, 'buffer', null, 'Giảm dần nhịp độ tư duy, thư giãn cơ bắp để hệ tiêu hóa hoạt động tốt nhất.');
-      }
-      addItem('Nghỉ trưa & Ăn trưa điều độ', lunchDuration, 'meal', null, 'Tránh xa màn hình máy tính. Thưởng thức bữa trưa chậm rãi và chợp mắt 15-20 phút giúp tái tạo tế bào não.');
-      consecutiveWorkMinutes = 0;
-    }
+  // B. Lunch
+  fixedBlocks.push({
+    activity: 'Nghỉ trưa & Ăn trưa điều độ',
+    startTime: '12:00',
+    endTime: '13:00',
+    type: 'meal',
+    description: 'Tránh xa màn hình máy tính. Thưởng thức bữa trưa chậm rãi và chợp mắt 15-20 phút giúp tái tạo tế bào não.'
+  });
 
-    // Check if we need to insert Dinner
-    if (currentTime < dinnerStart && (currentTime + task.duration) > dinnerStart) {
-      const gap = dinnerStart - currentTime;
-      if (gap > 10) {
-        addItem('Thư giãn cuối ngày / Chuẩn bị ăn tối', gap, 'buffer', null, 'Hạ nhiệt cơ thể, kết thúc các cuộc họp căng thẳng.');
-      }
-      addItem('Bữa tối & Thời gian gia đình', dinnerDuration, 'meal', null, 'Dùng bữa tối thanh đạm trước giờ ngủ ít nhất 3 tiếng để tránh trào ngược dạ dày thực quản (GERD).');
-      consecutiveWorkMinutes = 0;
-    }
+  // C. Dinner
+  fixedBlocks.push({
+    activity: 'Bữa tối & Thời gian gia đình',
+    startTime: '18:30',
+    endTime: '19:30',
+    type: 'meal',
+    description: 'Dùng bữa tối nhẹ nhàng, tốt cho hệ vi sinh đường ruột và hệ tiêu hóa.'
+  });
 
-    // Check if current time is past sleep time
-    if (currentTime >= sleepTime) {
-      break;
-    }
+  // D. Sleep Hygiene
+  const sleepStartMins = timeToMinutes(preferences.sleepTime) - 30;
+  fixedBlocks.push({
+    activity: 'Vệ sinh giấc ngủ (Sleep Hygiene)',
+    startTime: minutesToTime(sleepStartMins),
+    endTime: preferences.sleepTime,
+    type: 'routine',
+    description: 'Ngắt hoàn toàn ánh sáng xanh từ điện thoại/máy tính để kích thích Melatonin tự nhiên, chuẩn bị cho giấc ngủ sâu phục hồi.'
+  });
 
-    // Check if we need a periodic break before this task
-    if (consecutiveWorkMinutes >= preferences.breakInterval) {
-      addItem('Nghỉ giải lao y khoa', preferences.breakDuration, 'break', null, 'Thực hiện quy tắc 20-20-20 bảo vệ mắt, uống 1 cốc nước ấm, đứng dậy giãn cơ vai gáy để lưu thông máu.');
-      consecutiveWorkMinutes = 0;
-    }
+  // Now compile all active tasks (not completed, or completed based on preference)
+  const activeTasks = preferences.showCompletedInSchedule !== false
+    ? [...tasks]
+    : [...tasks].filter(t => !t.completed);
 
-    // Double check lunch/dinner if we just skipped past their start hours
-    if (currentTime >= lunchStart && currentTime < (lunchStart + lunchDuration) && !schedule.some(s => s.activity.includes('Ăn trưa'))) {
-      addItem('Nghỉ trưa & Ăn trưa điều độ', lunchDuration, 'meal', null, 'Nạp năng lượng và nghỉ ngơi tĩnh tâm để giảm hormone stress Adrenaline.');
-      consecutiveWorkMinutes = 0;
-    }
-    if (currentTime >= dinnerStart && currentTime < (dinnerStart + dinnerDuration) && !schedule.some(s => s.activity.includes('Ăn tối'))) {
-      addItem('Bữa tối & Thời gian gia đình', dinnerDuration, 'meal', null, 'Ăn tối nhẹ nhàng, tốt cho hệ vi sinh đường ruột.');
-      consecutiveWorkMinutes = 0;
-    }
+  // Sort tasks by startTime
+  activeTasks.sort((a, b) => (a.startTime || '08:00').localeCompare(b.startTime || '08:00'));
 
-    // Now schedule the task
-    const taskDuration = task.duration;
-    // Check if task fits before sleep
-    if (currentTime + taskDuration > sleepTime) {
-      const availableMins = sleepTime - currentTime;
-      if (availableMins >= 15) {
-        addItem(`Làm một phần: ${task.title}`, availableMins, 'task', task.id, `Tiến hành bước đầu của công việc (Cần thêm ${taskDuration - availableMins} phút vào hôm sau để tránh quá tải nhận thức).`);
-      }
-      break;
-    }
+  // Convert tasks to events
+  const events: { id: string | null; activity: string; startTime: string; endTime: string; type: ScheduleItem['type']; taskId: string | null; description: string }[] = [];
 
-    // Description generation
+  // 1. Add all tasks
+  activeTasks.forEach((task) => {
+    const tStart = task.startTime || '08:00';
+    const taskDuration = getTaskDuration(task);
+    const endT = task.endTime || minutesToTime(timeToMinutes(tStart) + taskDuration);
+    
     let desc = task.notes || `Thực hiện công việc có mức độ ưu tiên: ${task.priority === 'high' ? 'Cao (Cần tập trung tối đa)' : task.priority === 'medium' ? 'Trung bình' : 'Thấp'}.`;
-    if (task.deadline) {
-      desc += ` Hạn chót y tế/công việc: ${task.deadline}.`;
+    if (task.date) {
+      desc += ` Ngày thực hiện: ${task.date}.`;
     }
 
-    addItem(task.title, taskDuration, 'task', task.id, desc);
-    consecutiveWorkMinutes += taskDuration;
+    events.push({
+      id: task.id,
+      activity: task.title,
+      startTime: tStart,
+      endTime: endT,
+      type: 'task',
+      taskId: task.id,
+      description: desc
+    });
+  });
 
-    // After a task, check if we want to place a break immediately if it was a very long task
-    if (taskDuration >= 90) {
-      addItem('Nghỉ xả hơi chủ động', preferences.breakDuration, 'break', null, 'Đi bộ nhẹ, uống nước. Vận động giúp giải phóng axit lactic tích tụ trong cơ cơ cốt lõi do ngồi lâu.');
-      consecutiveWorkMinutes = 0;
+  // 2. Overlay fixed blocks if they don't severely overlap with task events
+  fixedBlocks.forEach((block, idx) => {
+    const blockStart = timeToMinutes(block.startTime);
+    const blockEnd = timeToMinutes(block.endTime);
+    
+    // Check if there is a task that fully covers this block or overlaps significantly
+    const hasSevereOverlap = events.some(evt => {
+      const evtStart = timeToMinutes(evt.startTime);
+      const evtEnd = timeToMinutes(evt.endTime);
+      return (evtStart < blockEnd && evtEnd > blockStart);
+    });
+
+    if (!hasSevereOverlap) {
+      events.push({
+        id: `fixed_${idx}`,
+        activity: block.activity,
+        startTime: block.startTime,
+        endTime: block.endTime,
+        type: block.type,
+        taskId: null,
+        description: block.description
+      });
     }
-  }
+  });
 
-  // C. Fill remaining time before sleep if any
-  if (currentTime < sleepTime) {
-    const remaining = sleepTime - currentTime;
-    if (remaining >= 30) {
-      addItem('Vệ sinh giấc ngủ (Sleep Hygiene)', remaining, 'routine', null, 'Ngắt hoàn toàn ánh sáng xanh từ điện thoại/máy tính để kích thích Melatonin tự nhiên, chuẩn bị cho giấc ngủ sâu phục hồi.');
-    } else if (remaining > 0) {
-      addItem('Nghỉ ngơi tự do cuối ngày', remaining, 'buffer', null, 'Thư giãn hoàn toàn cơ thể, hít thở sâu.');
+  // Sort all events by startTime
+  events.sort((a, b) => {
+    const cmp = a.startTime.localeCompare(b.startTime);
+    if (cmp !== 0) return cmp;
+    if (a.type === 'task' && b.type !== 'task') return -1;
+    if (a.type !== 'task' && b.type === 'task') return 1;
+    return 0;
+  });
+
+  // 3. Now build the timeline and insert breaks / buffers in gaps
+  let currentMins = timeToMinutes(preferences.wakeUpTime);
+  const sleepMins = timeToMinutes(preferences.sleepTime);
+  let itemIdCounter = 1;
+
+  events.forEach(evt => {
+    const evtStart = timeToMinutes(evt.startTime);
+    const evtEnd = timeToMinutes(evt.endTime);
+
+    // If the event starts after our current time, insert a break or buffer in the gap
+    if (evtStart > currentMins && evtStart < sleepMins) {
+      const gapDuration = evtStart - currentMins;
+      if (gapDuration >= preferences.breakInterval) {
+        // Insert a break
+        const breakEnd = Math.min(currentMins + preferences.breakDuration, evtStart);
+        schedule.push({
+          id: `item_break_${itemIdCounter++}`,
+          timeSlot: `${minutesToTime(currentMins)} - ${minutesToTime(breakEnd)}`,
+          startTime: minutesToTime(currentMins),
+          endTime: minutesToTime(breakEnd),
+          activity: 'Nghỉ giải lao y khoa',
+          type: 'break',
+          taskId: null,
+          duration: breakEnd - currentMins,
+          description: 'Thực hiện quy tắc 20-20-20 bảo vệ mắt, uống 1 cốc nước ấm, đứng dậy giãn cơ vai gáy để lưu thông máu.'
+        });
+        currentMins = breakEnd;
+      }
+      
+      // If there is still a gap left, add it as buffer/rest
+      if (evtStart > currentMins) {
+        const remainingGap = evtStart - currentMins;
+        schedule.push({
+          id: `item_buf_${itemIdCounter++}`,
+          timeSlot: `${minutesToTime(currentMins)} - ${evt.startTime}`,
+          startTime: minutesToTime(currentMins),
+          endTime: evt.startTime,
+          activity: 'Nghỉ ngơi tĩnh tâm / Thời gian dự phòng',
+          type: 'buffer',
+          taskId: null,
+          duration: remainingGap,
+          description: 'Thư giãn cơ bắp, bổ sung nước và chuẩn bị tinh thần cho hoạt động tiếp theo.'
+        });
+      }
+    }
+
+    // Only schedule if it fits or starts before sleepTime
+    if (evtStart < sleepMins) {
+      const actualEnd = Math.min(evtEnd, sleepMins);
+      const actualDuration = actualEnd - evtStart;
+      if (actualDuration > 0) {
+        schedule.push({
+          id: evt.taskId || `item_task_${itemIdCounter++}`,
+          timeSlot: `${evt.startTime} - ${minutesToTime(actualEnd)}`,
+          startTime: evt.startTime,
+          endTime: minutesToTime(actualEnd),
+          activity: evt.activity,
+          type: evt.type,
+          taskId: evt.taskId,
+          duration: actualDuration,
+          description: evt.description
+        });
+      }
+      currentMins = actualEnd;
+    }
+  });
+
+  // If we haven't reached sleepTime yet, fill the rest with Sleep Hygiene if we haven't added it
+  if (currentMins < sleepMins) {
+    const remaining = sleepMins - currentMins;
+    const alreadyHasSleepPrep = schedule.some(s => s.activity.includes('Sleep Hygiene') || s.activity.includes('Vệ sinh giấc ngủ'));
+    if (!alreadyHasSleepPrep && remaining >= 15) {
+      schedule.push({
+        id: `item_sleep_${itemIdCounter++}`,
+        timeSlot: `${minutesToTime(currentMins)} - ${preferences.sleepTime}`,
+        startTime: minutesToTime(currentMins),
+        endTime: preferences.sleepTime,
+        activity: 'Vệ sinh giấc ngủ (Sleep Hygiene)',
+        type: 'routine',
+        taskId: null,
+        duration: remaining,
+        description: 'Ngắt hoàn toàn ánh sáng xanh từ điện thoại/máy tính để kích thích Melatonin tự nhiên, chuẩn bị cho giấc ngủ sâu phục hồi.'
+      });
+    } else {
+      schedule.push({
+        id: `item_end_${itemIdCounter++}`,
+        timeSlot: `${minutesToTime(currentMins)} - ${preferences.sleepTime}`,
+        startTime: minutesToTime(currentMins),
+        endTime: preferences.sleepTime,
+        activity: 'Nghỉ ngơi tự do cuối ngày',
+        type: 'buffer',
+        taskId: null,
+        duration: remaining,
+        description: 'Thư giãn hoàn toàn cơ thể, hít thở sâu chuẩn bị đi ngủ.'
+      });
     }
   }
 
@@ -204,7 +277,7 @@ export function localScheduler(tasks: Task[], preferences: UserPreferences): {
   }
 
   // Suggestion C: Health & Break Check
-  const totalWorkDuration = tasks.filter(t => !t.completed).reduce((sum, t) => sum + t.duration, 0);
+  const totalWorkDuration = tasks.filter(t => !t.completed).reduce((sum, t) => sum + getTaskDuration(t), 0);
   if (totalWorkDuration > 300) {
     suggestions.push({
       id: 'sug_health_rest',

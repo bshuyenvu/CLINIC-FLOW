@@ -16,20 +16,22 @@ const CATEGORIES = [
 
 export default function TaskForm({ onAddTask }: TaskFormProps) {
   const [title, setTitle] = useState('');
-  const [duration, setDuration] = useState<number>(60);
-  const [deadline, setDeadline] = useState('');
+  const [startTime, setStartTime] = useState('08:00');
+  const [endTime, setEndTime] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [priority, setPriority] = useState<Priority>('medium');
   const [category, setCategory] = useState('Lâm sàng');
   const [notes, setNotes] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || !startTime) return;
 
     onAddTask({
       title: title.trim(),
-      duration: Number(duration) || 30,
-      deadline: deadline || new Date().toISOString().split('T')[0],
+      startTime,
+      endTime: endTime || undefined,
+      date: date || new Date().toISOString().split('T')[0],
       priority,
       category,
       notes: notes.trim(),
@@ -37,8 +39,9 @@ export default function TaskForm({ onAddTask }: TaskFormProps) {
 
     // Reset form fields
     setTitle('');
-    setDuration(60);
-    setDeadline('');
+    setStartTime('08:00');
+    setEndTime('');
+    setDate(new Date().toISOString().split('T')[0]);
     setPriority('medium');
     setNotes('');
   };
@@ -68,65 +71,50 @@ export default function TaskForm({ onAddTask }: TaskFormProps) {
         />
       </div>
 
-      {/* Duration and Deadline */}
+      {/* Times (Start & End) */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label htmlFor="task-duration" className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 flex items-center gap-1">
-            <Clock className="w-3.5 h-3.5 text-gray-400" /> Thời lượng (phút)
+          <label htmlFor="task-start-time" className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 flex items-center gap-1">
+            <Clock className="w-3.5 h-3.5 text-gray-400" /> Giờ bắt đầu <span className="text-rose-500">*</span>
           </label>
           <input
-            type="number"
-            id="task-duration"
+            type="time"
+            id="task-start-time"
             required
-            value={duration || ''}
-            onChange={(e) => setDuration(e.target.value === '' ? '' as any : Number(e.target.value))}
-            className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+            className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100 cursor-pointer"
           />
         </div>
 
         <div>
-          <label htmlFor="task-deadline" className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 flex items-center gap-1">
-            <Calendar className="w-3.5 h-3.5 text-gray-400" /> Hạn chót (Deadline)
+          <label htmlFor="task-end-time" className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 flex items-center gap-1">
+            <Clock className="w-3.5 h-3.5 text-gray-400" /> Giờ kết thúc
           </label>
           <input
-            type="date"
-            id="task-deadline"
-            value={deadline}
-            onChange={(e) => setDeadline(e.target.value)}
+            type="time"
+            id="task-end-time"
+            value={endTime}
+            onChange={(e) => setEndTime(e.target.value)}
             className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100 cursor-pointer"
           />
         </div>
       </div>
 
-      {/* Priority and Category */}
+      {/* Date and Category */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5 flex items-center gap-1">
-            <AlertCircle className="w-3.5 h-3.5 text-gray-400" /> Độ ưu tiên
+          <label htmlFor="task-date" className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 flex items-center gap-1">
+            <Calendar className="w-3.5 h-3.5 text-gray-400" /> Ngày thực hiện <span className="text-rose-500">*</span>
           </label>
-          <div className="flex gap-1 bg-gray-50 dark:bg-slate-800/55 p-1 rounded-xl border border-gray-200 dark:border-slate-700">
-            {(['low', 'medium', 'high'] as Priority[]).map((p) => {
-              const label = p === 'high' ? 'Cao' : p === 'medium' ? 'Vừa' : 'Thấp';
-              const activeClasses = 
-                p === 'high' ? 'bg-rose-500 text-white shadow-sm' :
-                p === 'medium' ? 'bg-amber-500 text-white shadow-sm' :
-                'bg-emerald-500 text-white shadow-sm';
-              
-              return (
-                <button
-                  key={p}
-                  type="button"
-                  id={`prio-${p}`}
-                  onClick={() => setPriority(p)}
-                  className={`flex-1 py-1 px-1.5 text-xs font-medium rounded-lg transition-all ${
-                    priority === p ? activeClasses : 'text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-250'
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
+          <input
+            type="date"
+            id="task-date"
+            required
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100 cursor-pointer"
+          />
         </div>
 
         <div>
@@ -145,6 +133,36 @@ export default function TaskForm({ onAddTask }: TaskFormProps) {
               </option>
             ))}
           </select>
+        </div>
+      </div>
+
+      {/* Priority */}
+      <div>
+        <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5 flex items-center gap-1">
+          <AlertCircle className="w-3.5 h-3.5 text-gray-400" /> Độ ưu tiên
+        </label>
+        <div className="flex gap-1 bg-gray-50 dark:bg-slate-800/55 p-1 rounded-xl border border-gray-200 dark:border-slate-700">
+          {(['low', 'medium', 'high'] as Priority[]).map((p) => {
+            const label = p === 'high' ? 'Cao' : p === 'medium' ? 'Vừa' : 'Thấp';
+            const activeClasses = 
+              p === 'high' ? 'bg-rose-500 text-white shadow-sm' :
+              p === 'medium' ? 'bg-amber-500 text-white shadow-sm' :
+              'bg-emerald-500 text-white shadow-sm';
+            
+            return (
+              <button
+                key={p}
+                type="button"
+                id={`prio-${p}`}
+                onClick={() => setPriority(p)}
+                className={`flex-1 py-1.5 px-1.5 text-xs font-medium rounded-lg transition-all ${
+                  priority === p ? activeClasses : 'text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-250'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 

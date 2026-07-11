@@ -135,22 +135,23 @@ SỞ THÍCH & THIẾT LẬP CỦA NGƯỜI DÙNG:
 - Thời gian thức dậy: ${preferences.wakeUpTime}
 - Thời gian đi ngủ: ${preferences.sleepTime}
 - Tần suất nghỉ giải lao: cứ sau khoảng ${preferences.breakInterval} phút làm việc thì nghỉ ngơi ${preferences.breakDuration} phút.
-- Phong cách ưu tiên tập trung (focusStyle): ${preferences.focusStyle} (trong đó: 'priority' nghĩa là ưu tiên việc quan trọng trước; 'deadline' nghĩa là việc sát hạn chót trước; 'energy' nghĩa là ưu tiên việc nặng/phức tạp vào buổi sáng khi hormone cortisol đạt đỉnh giúp tập trung cao nhất).
+- Phong cách ưu tiên tập trung (focusStyle): ${preferences.focusStyle} (trong đó: 'priority' nghĩa là ưu tiên việc quan trọng trước; 'energy' nghĩa là ưu tiên việc nặng/phức tạp vào buổi sáng khi hormone cortisol đạt đỉnh giúp tập trung cao nhất).
 
-YÊU CẦU LẬP LỊCH CHUẨN Y KHOA:
-1. Phân bổ công việc vào các khung giờ cụ thể sáng - chiều - tối một cách khoa học:
+YÊU CẦU LẬP LỊCH CHUẨN Y KHOA & RÀNG BUỘC THỜI GIAN:
+1. RÀNG BUỘC THỜI GIAN CỐ ĐỊNH CỦA CÔNG VIỆC:
+   - Các công việc trong DANH SÁCH CÔNG VIỆC có mốc "startTime" (Giờ bắt đầu) cố định bắt buộc và "date" (Ngày thực hiện) cụ thể.
+   - Bạn PHẢI sắp xếp các công việc này chính xác tại mốc "startTime" được chỉ định của chúng.
+   - Nếu công việc có mốc "endTime" (Giờ kết thúc), hoạt động đó phải kết thúc chính xác tại "endTime". Nếu không có "endTime", hãy giả định thời lượng thực hiện mặc định là 60 phút hoặc tính toán một mốc kết thúc phù hợp dựa trên nội dung công việc.
+   - Không được thay đổi "startTime" của các công việc đã được người dùng chỉ định.
+
+2. Phân bổ công việc và các hoạt động đệm vào các khung giờ cụ thể sáng - chiều - tối một cách khoa học xung quanh mốc thời gian cố định của công việc:
    - Đầu buổi sáng (sau thức dậy): Nên có 15-30 phút đầu tiên tiếp xúc ánh sáng mặt trời tự nhiên để kích hoạt chu kỳ thức-ngủ, hỗ trợ sản sinh cortisol tự nhiên.
    - Tránh làm việc cường độ cực cao ngay khi vừa mở mắt hoặc sát giờ ngủ.
-   - Sắp xếp giờ ăn trưa (khoảng 12:00 - 13:00) và ăn tối (khoảng 18:30 - 19:30) cố định như một hoạt động y tế bắt buộc (type: 'meal') để duy trì lượng đường huyết ổn định và bảo vệ hệ tiêu hóa.
+   - Sắp xếp giờ ăn trưa (khoảng 12:00 - 13:00) và ăn tối (khoảng 18:30 - 19:30) cố định như một hoạt động y tế bắt buộc (type: 'meal') để duy trì lượng đường huyết ổn định và bảo vệ hệ tiêu hóa. Nếu có công việc chồng lấn lên khung giờ ăn này, hãy dời hoặc thu nhỏ thời lượng hoạt động sinh học cho khớp hợp lý.
    - Sát giờ đi ngủ (${preferences.sleepTime}): Thêm khoảng 30-45 phút "Thời gian đệm thư giãn / Vệ sinh giấc ngủ (Sleep Hygiene)" để ngắt thiết bị điện tử, hạn chế ánh sáng xanh, kích hoạt sản sinh melatonin nội sinh giúp ngủ sâu giấc.
 
-2. Xen kẽ các mốc nghỉ giải lao ngắn (type: 'break') với thời lượng ${preferences.breakDuration} phút một cách khoa học sau mỗi khoảng ${preferences.breakInterval} phút làm việc.
-   - Gợi ý trong mô tả giải lao các bài tập nhỏ: Quy tắc 20-20-20 bảo vệ mắt (nhìn xa 20 feet trong 20 giây sau mỗi 20 phút), bài tập giãn cơ cổ vai gáy (stretching), hít thở sâu cơ hoành để giảm căng thẳng, hoặc uống nước bổ sung điện giải.
-
-3. Sắp xếp công việc logic:
-   - Các công việc cùng chủ đề ('category') nên xếp gần nhau (Batching) để tránh hội chứng "mệt mỏi chuyển đổi nhận thức" (cognitive switching fatigue).
-   - Đặt những công việc nặng nhọc, cần tư duy sâu vào các khung giờ vàng sinh học (thường là 8h30-11h30 sáng và 14h30-17h00 chiều).
-   - Công việc nhẹ nhàng hoặc mang tính vận động nhẹ xếp vào lúc sau bữa ăn hoặc cuối chiều khi cơ thể có xu hướng uể oải nhẹ (postprandial somnolence).
+3. Xen kẽ các mốc nghỉ giải lao ngắn (type: 'break') với thời lượng ${preferences.breakDuration} phút một cách khoa học sau mỗi khoảng ${preferences.breakInterval} phút làm việc.
+   - Gợi ý trong mô tả giải lao các bài tập nhỏ: Quy tắc 20-20-20 bảo vệ mắt, bài tập giãn cơ cổ vai gáy (stretching), hít thở sâu cơ hoành để giảm căng thẳng, hoặc uống nước bổ sung điện giải.
 
 4. Phải gán chính xác 'taskId' của hoạt động trùng khớp với ID của công việc trong danh sách được gửi lên. Nếu công việc có thuộc tính completed: true, hãy vẫn sắp xếp và giữ nó trong lịch trình bình thường để ghi nhận hoàn thành.
 5. Tạo ít nhất 3-4 gợi ý tối ưu chi tiết (suggestions) bằng tiếng Việt dưới góc nhìn của một BÁC SĨ LÂM SÀNG giải thích lý do khoa học tại sao sắp xếp như vậy (ví dụ: lý do gộp nhóm, tầm quan trọng của việc thư giãn mắt, kiểm soát cortisol, vệ sinh giấc ngủ).

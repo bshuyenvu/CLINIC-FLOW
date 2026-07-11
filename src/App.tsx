@@ -39,8 +39,9 @@ const DEFAULT_TASKS: Task[] = [
   {
     id: 't_1',
     title: 'Nghiên cứu hồ sơ & Viết báo cáo lâm sàng',
-    duration: 90,
-    deadline: new Date().toISOString().split('T')[0],
+    startTime: '08:30',
+    endTime: '10:00',
+    date: new Date().toISOString().split('T')[0],
     priority: 'high',
     category: 'Công việc',
     notes: 'Xem lại các chỉ số xét nghiệm và hoàn thiện phác đồ hỗ trợ điều trị lối sống.',
@@ -49,8 +50,9 @@ const DEFAULT_TASKS: Task[] = [
   {
     id: 't_2',
     title: 'Hội chẩn chuyên môn & Thiết kế bài giảng Y khoa',
-    duration: 60,
-    deadline: new Date().toISOString().split('T')[0],
+    startTime: '10:30',
+    endTime: '11:30',
+    date: new Date().toISOString().split('T')[0],
     priority: 'medium',
     category: 'Học tập',
     notes: 'Thảo luận cùng đồng nghiệp về nhịp sinh học và thiết kế slide dinh dưỡng phòng ngừa.',
@@ -59,8 +61,9 @@ const DEFAULT_TASKS: Task[] = [
   {
     id: 't_3',
     title: 'Cập nhật nghiên cứu Y văn mới (PubMed)',
-    duration: 45,
-    deadline: new Date().toISOString().split('T')[0],
+    startTime: '14:00',
+    endTime: '14:45',
+    date: new Date().toISOString().split('T')[0],
     priority: 'medium',
     category: 'Học tập',
     notes: 'Đọc thêm các bài báo về ảnh hưởng của cortisol ban ngày và vệ sinh giấc ngủ ban đêm.',
@@ -69,8 +72,9 @@ const DEFAULT_TASKS: Task[] = [
   {
     id: 't_4',
     title: 'Vận động thể chất Aerobic nâng cao nhịp tim',
-    duration: 40,
-    deadline: new Date().toISOString().split('T')[0],
+    startTime: '17:00',
+    endTime: '17:40',
+    date: new Date().toISOString().split('T')[0],
     priority: 'low',
     category: 'Sức khỏe',
     notes: 'Đi bộ nhanh hoặc đạp xe nhẹ giúp điều hòa huyết áp, giảm căng thẳng vỏ não.',
@@ -1865,11 +1869,14 @@ export default function App() {
                         <span className={`text-xs font-semibold text-slate-800 break-words block ${task.completed ? 'line-through text-slate-400' : ''}`}>
                           {task.title}
                         </span>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
                           <span className="text-[9px] text-slate-400 flex items-center gap-0.5 font-medium">
-                            <Clock className="w-2.5 h-2.5" /> {task.duration} phút
+                            <Clock className="w-2.5 h-2.5 text-indigo-500" /> {task.startTime || '08:00'}{task.endTime ? ` - ${task.endTime}` : ''}
                           </span>
-                          <span className="text-[9px] px-1.5 py-0.2 rounded-full font-bold bg-slate-100 text-slate-500">
+                          <span className="text-[9px] text-slate-400 flex items-center gap-0.5 font-medium">
+                            <Calendar className="w-2.5 h-2.5 text-teal-500" /> {(task.date || new Date().toISOString().split('T')[0]).split('-').reverse().join('/')}
+                          </span>
+                          <span className="text-[9px] px-1.5 py-0.2 rounded-full font-bold bg-slate-100 dark:bg-slate-800 text-slate-500">
                             {task.category}
                           </span>
                         </div>
@@ -2387,32 +2394,46 @@ export default function App() {
               />
             </div>
 
-            {/* Duration and Deadline */}
+            {/* Times (Start & End) */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-gray-400" /> Thời lượng (phút)
+                  <Clock className="w-3.5 h-3.5 text-gray-400" /> Giờ bắt đầu <span className="text-rose-500">*</span>
                 </label>
                 <input
-                  type="number"
+                  type="time"
                   required
-                  value={editingTask.duration}
-                  onChange={(e) => setEditingTask({ ...editingTask, duration: Number(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100"
+                  value={editingTask.startTime}
+                  onChange={(e) => setEditingTask({ ...editingTask, startTime: e.target.value })}
+                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100 cursor-pointer"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-gray-400" /> Hạn chót
+                  <Clock className="w-3.5 h-3.5 text-gray-400" /> Giờ kết thúc
                 </label>
                 <input
-                  type="date"
-                  value={editingTask.deadline}
-                  onChange={(e) => setEditingTask({ ...editingTask, deadline: e.target.value })}
+                  type="time"
+                  value={editingTask.endTime || ''}
+                  onChange={(e) => setEditingTask({ ...editingTask, endTime: e.target.value || undefined })}
                   className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100 cursor-pointer"
                 />
               </div>
+            </div>
+
+            {/* Date */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-gray-400" /> Ngày thực hiện <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="date"
+                required
+                value={editingTask.date}
+                onChange={(e) => setEditingTask({ ...editingTask, date: e.target.value })}
+                className="w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100 cursor-pointer"
+              />
             </div>
 
             {/* Priority and Category */}
