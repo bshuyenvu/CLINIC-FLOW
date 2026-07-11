@@ -4,6 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CLINIC FLOW - Dr Huyen Vu</title>
+    <script>
+      // Instantly handle Google OAuth redirect in popup and notify opener
+      if (window.location.hash && window.location.hash.includes('access_token=')) {
+        try {
+          const params = new URLSearchParams(window.location.hash.substring(1));
+          const accessToken = params.get('access_token');
+          if (accessToken && window.opener) {
+            window.opener.postMessage({ type: 'GOOGLE_OAUTH_SUCCESS', accessToken: accessToken }, window.location.origin);
+            window.close();
+          }
+        } catch (e) {
+          console.error('Error handling Google OAuth redirect:', e);
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

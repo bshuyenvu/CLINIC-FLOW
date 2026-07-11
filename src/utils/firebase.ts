@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithCredential } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { ScheduleItem } from '../types';
@@ -7,10 +7,6 @@ import { ScheduleItem } from '../types';
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-
-const provider = new GoogleAuthProvider();
-provider.addScope('https://www.googleapis.com/auth/calendar.events');
-provider.addScope('https://www.googleapis.com/auth/drive.file');
 
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
@@ -63,16 +59,70 @@ export const initAuth = (
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
   try {
     isSigningIn = true;
-    const result = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error('Failed to get access token from Firebase Auth');
+    
+    const clientId = firebaseConfig.oAuthClientId || '478860569518-kn1ugdqjedl9f9vmj94podev7o9r5rea.apps.googleusercontent.com';
+    const redirectUri = window.location.origin;
+    const scopes = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive.file';
+    
+    // Construct Google OAuth URL
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scopes)}`;
+    
+    // Open OAuth Popup
+    const popup = window.open(authUrl, 'google_oauth', 'width=600,height=600');
+    if (!popup) {
+      throw new Error('Popup bị chặn. Vui lòng cho phép hiển thị popup trên trình duyệt để tiếp tục liên kết Google.');
     }
-
-    cachedAccessToken = credential.accessToken;
-    return { user: result.user, accessToken: cachedAccessToken };
+    
+    const token = await new Promise<string>((resolve, reject) => {
+      // Create message event listener to receive token instantly
+      const handleMessage = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+        if (event.data?.type === 'GOOGLE_OAUTH_SUCCESS' && event.data?.accessToken) {
+          window.removeEventListener('message', handleMessage);
+          resolve(event.data.accessToken);
+        }
+      };
+      window.addEventListener('message', handleMessage);
+      
+      const interval = setInterval(() => {
+        try {
+          if (!popup || popup.closed) {
+            clearInterval(interval);
+            window.removeEventListener('message', handleMessage);
+            reject(new Error('Người dùng đã hủy hoặc đóng cửa sổ liên kết Google.'));
+            return;
+          }
+          
+          if (popup.location.origin === window.location.origin) {
+            const hash = popup.location.hash;
+            if (hash && hash.includes('access_token=')) {
+              const params = new URLSearchParams(hash.substring(1));
+              const accessToken = params.get('access_token');
+              clearInterval(interval);
+              window.removeEventListener('message', handleMessage);
+              popup.close();
+              if (accessToken) {
+                resolve(accessToken);
+              } else {
+                reject(new Error('Không tìm thấy Access Token từ phản hồi của Google.'));
+              }
+            }
+          }
+        } catch (e) {
+          // Cross-origin access error is normal while user is on accounts.google.com
+        }
+      }, 500);
+    });
+    
+    cachedAccessToken = token;
+    
+    // Sign into Firebase Auth using the credential from Google to sync Firestore
+    const credential = GoogleAuthProvider.credential(null, token);
+    const result = await signInWithCredential(auth, credential);
+    
+    return { user: result.user, accessToken: token };
   } catch (error: any) {
-    console.error('Sign in error:', error);
+    console.error('Google Sign-In Error:', error);
     throw error;
   } finally {
     isSigningIn = false;
