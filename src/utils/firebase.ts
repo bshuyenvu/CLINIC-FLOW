@@ -60,67 +60,90 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
   try {
     isSigningIn = true;
     
-    const clientId = firebaseConfig.oAuthClientId || '478860569518-kn1ugdqjedl9f9vmj94podev7o9r5rea.apps.googleusercontent.com';
-    const redirectUri = window.location.origin;
-    const scopes = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive.file';
+    // Check if custom Google Client ID is configured in environment
+    const customClientId = (import.meta as any).env.VITE_GOOGLE_CLIENT_ID;
     
-    // Construct Google OAuth URL
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scopes)}`;
-    
-    // Open OAuth Popup
-    const popup = window.open(authUrl, 'google_oauth', 'width=600,height=600');
-    if (!popup) {
-      throw new Error('Popup bị chặn. Vui lòng cho phép hiển thị popup trên trình duyệt để tiếp tục liên kết Google.');
-    }
-    
-    const token = await new Promise<string>((resolve, reject) => {
-      // Create message event listener to receive token instantly
-      const handleMessage = (event: MessageEvent) => {
-        if (event.origin !== window.location.origin) return;
-        if (event.data?.type === 'GOOGLE_OAUTH_SUCCESS' && event.data?.accessToken) {
-          window.removeEventListener('message', handleMessage);
-          resolve(event.data.accessToken);
-        }
-      };
-      window.addEventListener('message', handleMessage);
+    if (customClientId && customClientId.trim() !== "") {
+      console.log("Using custom Google OAuth Client ID for sign-in:", customClientId);
+      const redirectUri = window.location.origin;
+      const scopes = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive.file';
       
-      const interval = setInterval(() => {
-        try {
-          if (!popup || popup.closed) {
-            clearInterval(interval);
+      // Construct Google OAuth URL
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(customClientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scopes)}`;
+      
+      // Open OAuth Popup
+      const popup = window.open(authUrl, 'google_oauth', 'width=600,height=600');
+      if (!popup) {
+        throw new Error('Popup bị chặn. Vui lòng cho phép hiển thị popup trên trình duyệt để tiếp tục liên kết Google.');
+      }
+      
+      const token = await new Promise<string>((resolve, reject) => {
+        const handleMessage = (event: MessageEvent) => {
+          if (event.origin !== window.location.origin) return;
+          if (event.data?.type === 'GOOGLE_OAUTH_SUCCESS' && event.data?.accessToken) {
             window.removeEventListener('message', handleMessage);
-            reject(new Error('Người dùng đã hủy hoặc đóng cửa sổ liên kết Google.'));
-            return;
+            resolve(event.data.accessToken);
           }
-          
-          if (popup.location.origin === window.location.origin) {
-            const hash = popup.location.hash;
-            if (hash && hash.includes('access_token=')) {
-              const params = new URLSearchParams(hash.substring(1));
-              const accessToken = params.get('access_token');
+        };
+        window.addEventListener('message', handleMessage);
+        
+        const interval = setInterval(() => {
+          try {
+            if (!popup || popup.closed) {
               clearInterval(interval);
               window.removeEventListener('message', handleMessage);
-              popup.close();
-              if (accessToken) {
-                resolve(accessToken);
-              } else {
-                reject(new Error('Không tìm thấy Access Token từ phản hồi của Google.'));
+              reject(new Error('Người dùng đã hủy hoặc đóng cửa sổ liên kết Google.'));
+              return;
+            }
+            
+            if (popup.location.origin === window.location.origin) {
+              const hash = popup.location.hash;
+              if (hash && hash.includes('access_token=')) {
+                const params = new URLSearchParams(hash.substring(1));
+                const accessToken = params.get('access_token');
+                clearInterval(interval);
+                window.removeEventListener('message', handleMessage);
+                popup.close();
+                if (accessToken) {
+                  resolve(accessToken);
+                } else {
+                  reject(new Error('Không tìm thấy Access Token từ phản hồi của Google.'));
+                }
               }
             }
+          } catch (e) {
+            // Cross-origin access error is normal
           }
-        } catch (e) {
-          // Cross-origin access error is normal while user is on accounts.google.com
-        }
-      }, 500);
+        }, 500);
+      });
+      
+      cachedAccessToken = token;
+      
+      // Sign into Firebase Auth using the credential from Google to sync Firestore
+      const credential = GoogleAuthProvider.credential(null, token);
+      const result = await signInWithCredential(auth, credential);
+      return { user: result.user, accessToken: token };
+    }
+
+    // Default: Use standard Firebase signInWithPopup
+    // This requires adding the dynamic container domain to Authorized Domains in Firebase Authentication
+    console.log("Using standard Firebase Auth popup for Google Sign-In.");
+    const provider = new GoogleAuthProvider();
+    provider.addScope('https://www.googleapis.com/auth/calendar.events');
+    provider.addScope('https://www.googleapis.com/auth/drive.file');
+    provider.setCustomParameters({
+      prompt: 'select_account'
     });
-    
-    cachedAccessToken = token;
-    
-    // Sign into Firebase Auth using the credential from Google to sync Firestore
-    const credential = GoogleAuthProvider.credential(null, token);
-    const result = await signInWithCredential(auth, credential);
-    
-    return { user: result.user, accessToken: token };
+
+    const { signInWithPopup } = await import('firebase/auth');
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (!credential?.accessToken) {
+      throw new Error('Không lấy được Access Token từ Firebase Auth.');
+    }
+
+    cachedAccessToken = credential.accessToken;
+    return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     console.error('Google Sign-In Error:', error);
     throw error;

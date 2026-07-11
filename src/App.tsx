@@ -37,7 +37,10 @@ import {
   Eye,
   BarChart3,
   TrendingUp,
-  CalendarDays
+  CalendarDays,
+  Settings,
+  ExternalLink,
+  HelpCircle
 } from 'lucide-react';
 
 const DEFAULT_TASKS: Task[] = [
@@ -156,6 +159,8 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSuccessMessage, setSyncSuccessMessage] = useState<string | null>(null);
   const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null);
+  const [showOAuthConfigGuide, setShowOAuthConfigGuide] = useState(false);
+  const [copiedText, setCopiedText] = useState<string | null>(null);
 
   // Google Drive States
   const [isDriveSyncing, setIsDriveSyncing] = useState(false);
@@ -572,8 +577,16 @@ export default function App() {
       const errorMsg = err.message || '';
       const errorCode = err.code || '';
       
-      if (errorCode === 'auth/unauthorized-domain' || errorMsg.includes('unauthorized-domain') || errorMsg.includes('unauthorized partner domain')) {
-        setSyncErrorMessage('Đăng nhập nhanh bằng Google chưa khả dụng do tên miền chưa được cấu hình trên Firebase Console. Vui lòng sử dụng tính năng Đăng nhập / Đăng ký Gmail bên dưới.');
+      if (
+        errorCode === 'auth/unauthorized-domain' || 
+        errorMsg.includes('unauthorized-domain') || 
+        errorMsg.includes('unauthorized partner domain') ||
+        errorMsg.includes('redirect_uri_mismatch') ||
+        errorCode.includes('redirect_uri_mismatch') ||
+        errorMsg.includes('unauthorized_client')
+      ) {
+        setShowOAuthConfigGuide(true);
+        setSyncErrorMessage('Liên kết Google chưa khả dụng do tên miền chưa được thêm vào Danh sách Ủy quyền (Authorized Domains) của Google/Firebase. Hãy bấm nút "Cấu hình Google/Firebase" bên dưới để xem hướng dẫn.');
       } else {
         setSyncErrorMessage('Kết nối Google Calendar thất bại: ' + (err.message || err));
       }
@@ -2247,11 +2260,22 @@ export default function App() {
               </div>
             )}
             {syncErrorMessage && (
-              <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-start gap-3 shadow-sm">
+              <div className="p-4 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 rounded-2xl flex items-start gap-3 shadow-sm">
                 <AlertTriangle className="w-5 h-5 text-rose-500 shrink-0" />
-                <div className="space-y-0.5">
-                  <p className="text-sm font-semibold text-rose-950">Đồng bộ thất bại</p>
-                  <p className="text-xs text-rose-700">{syncErrorMessage}</p>
+                <div className="space-y-2 flex-1">
+                  <div>
+                    <p className="text-sm font-semibold text-rose-950 dark:text-rose-250">Đồng bộ thất bại</p>
+                    <p className="text-xs text-rose-700 dark:text-rose-300">{syncErrorMessage}</p>
+                  </div>
+                  {(syncErrorMessage.includes('chưa được cấu hình') || syncErrorMessage.includes('tên miền') || syncErrorMessage.includes('unauthorized-domain') || syncErrorMessage.includes('redirect_uri_mismatch') || syncErrorMessage.includes('Liên kết Google')) && (
+                    <button
+                      onClick={() => setShowOAuthConfigGuide(true)}
+                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl text-[10px] font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Settings className="w-3 h-3 animate-spin" style={{ animationDuration: '6s' }} />
+                      Cấu hình Google/Firebase
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -3255,6 +3279,157 @@ export default function App() {
               </button>
             </div>
           </form>
+        </div>
+      </div>
+    )}
+
+    {/* OAUTH / FIREBASE CONFIGURATION GUIDE MODAL */}
+    {showOAuthConfigGuide && (
+      <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex justify-center items-center z-50 p-4 animate-fadeIn print:hidden animate-duration-150" id="oauth-guide-modal">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-150 dark:border-slate-800 p-6 shadow-2xl w-full max-w-2xl flex flex-col gap-5 max-h-[90vh] overflow-y-auto">
+          <div className="flex justify-between items-center pb-3 border-b border-gray-100 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-rose-50 dark:bg-rose-950/40 rounded-xl text-rose-600 dark:text-rose-400">
+                <Settings className="w-5 h-5 animate-spin" style={{ animationDuration: '8s' }} />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-white uppercase tracking-tight">Hướng dẫn cấu hình kết nối Google</h3>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium leading-none mt-1">Cần thêm Tên miền (Domain) của ứng dụng vào danh sách ủy quyền để Google cho phép đồng bộ.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => { setShowOAuthConfigGuide(false); setCopiedText(null); }}
+              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850"
+            >
+              Đóng lại
+            </button>
+          </div>
+
+          <div className="space-y-4 text-xs text-slate-600 dark:text-slate-300">
+            {/* Context Box */}
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-950/50 rounded-2xl border border-slate-100 dark:border-slate-800/60 space-y-2">
+              <p className="font-bold text-slate-800 dark:text-slate-200">Thông tin dự án và tên miền của bạn:</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px]">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 block uppercase">Tên miền ứng dụng (JavaScript Origin / Redirect URI)</span>
+                  <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-150 dark:border-slate-800">
+                    <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold truncate flex-1">{window.location.origin}</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(window.location.origin);
+                        setCopiedText('origin');
+                        setTimeout(() => setCopiedText(null), 2000);
+                      }}
+                      className="text-indigo-600 dark:text-indigo-400 hover:underline font-bold cursor-pointer shrink-0 text-[10px]"
+                    >
+                      {copiedText === 'origin' ? 'Đã chép! ✓' : 'Sao chép'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 block uppercase">Tên miền Firebase (Authorized Domain Host)</span>
+                  <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-150 dark:border-slate-800">
+                    <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold truncate flex-1">{window.location.hostname}</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(window.location.hostname);
+                        setCopiedText('hostname');
+                        setTimeout(() => setCopiedText(null), 2000);
+                      }}
+                      className="text-indigo-600 dark:text-indigo-400 hover:underline font-bold cursor-pointer shrink-0 text-[10px]"
+                    >
+                      {copiedText === 'hostname' ? 'Đã chép! ✓' : 'Sao chép'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Methods Tabs */}
+            <div className="border-b border-slate-100 dark:border-slate-800 flex gap-2">
+              <span className="pb-2 text-xs font-extrabold text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 uppercase">
+                Cách 1: Thêm Ủy Quyền Tên Miền (Khuyên dùng - Nhanh nhất)
+              </span>
+            </div>
+
+            <div className="space-y-4 leading-relaxed text-slate-600 dark:text-slate-300">
+              <p>
+                Để bảo mật, Google chỉ cho phép đăng nhập từ những tên miền đã được bạn ủy quyền trong bảng điều khiển. Do ứng dụng đang chạy thử nghiệm trong môi trường AI Studio (có tên miền động), bạn cần thực hiện 2 bước đơn giản sau để cấp quyền:
+              </p>
+
+              <div className="space-y-4">
+                {/* Step 1 */}
+                <div className="flex gap-3">
+                  <div className="w-5 h-5 rounded-full bg-indigo-500 text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">1</div>
+                  <div className="space-y-1.5 flex-1">
+                    <p className="font-bold text-slate-800 dark:text-slate-200">Ủy quyền tên miền trên Firebase Console (Cho phép popup kết nối)</p>
+                    <p className="text-slate-500">Mở liên kết quản trị Authentication của dự án Firebase:</p>
+                    <a
+                      href="https://console.firebase.google.com/project/gen-lang-client-0459601012/authentication/providers"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:underline font-bold text-[11px]"
+                    >
+                      Đi tới Firebase Auth Settings <ExternalLink className="w-3 h-3" />
+                    </a>
+                    <ol className="list-decimal pl-4 space-y-1 text-slate-500 mt-1">
+                      <li>Cuộn xuống dưới cùng tìm mục <strong>"Tên miền được ủy quyền" (Authorized domains)</strong>.</li>
+                      <li>Bấm <strong>"Thêm tên miền" (Add domain)</strong>.</li>
+                      <li>Dán tên miền Firebase vừa sao chép ở trên: <strong className="font-mono text-slate-700 dark:text-slate-300 select-all">{window.location.hostname}</strong> và bấm <strong>Thêm</strong>.</li>
+                    </ol>
+                  </div>
+                </div>
+
+                {/* Step 2 */}
+                <div className="flex gap-3">
+                  <div className="w-5 h-5 rounded-full bg-indigo-500 text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">2</div>
+                  <div className="space-y-1.5 flex-1">
+                    <p className="font-bold text-slate-800 dark:text-slate-200">Ủy quyền chuyển hướng trên Google Cloud Console (Sửa lỗi 400 redirect_uri_mismatch)</p>
+                    <p className="text-slate-500">Mở trang cấu hình thông tin xác thực Google OAuth:</p>
+                    <a
+                      href="https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0459601012"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:underline font-bold text-[11px]"
+                    >
+                      Đi tới Google Credentials Panel <ExternalLink className="w-3 h-3" />
+                    </a>
+                    <ol className="list-decimal pl-4 space-y-1 text-slate-500 mt-1">
+                      <li>Trong danh mục <strong>OAuth 2.0 Client IDs</strong>, tìm và nhấp chọn dòng ứng dụng Web của bạn (ví dụ: <em>Web client...</em>).</li>
+                      <li>Tại mục <strong>Nguồn JavaScript đã được ủy quyền (Authorized JavaScript origins)</strong>, bấm Thêm URI và dán: <strong className="font-mono text-slate-700 dark:text-slate-300 select-all">{window.location.origin}</strong></li>
+                      <li>Tại mục <strong>URI chuyển hướng đã được ủy quyền (Authorized redirect URIs)</strong>, bấm Thêm URI và dán cả 2 địa chỉ sau:
+                        <ul className="list-disc pl-4 mt-0.5 text-indigo-600 dark:text-indigo-400 font-mono text-[10px]">
+                          <li>{window.location.origin}</li>
+                          <li>{window.location.origin}/auth/callback</li>
+                        </ul>
+                      </li>
+                      <li>Bấm <strong>Lưu lại (Save)</strong> ở dưới cùng. Đợi 1-2 phút để Google cập nhật cấu hình.</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 rounded-2xl flex gap-2.5 items-start">
+                <HelpCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-bold text-amber-900 dark:text-amber-300 text-[11px]">Bạn muốn sử dụng Client ID Google riêng của mình?</p>
+                  <p className="text-slate-500 text-[10px]">
+                    Bạn có thể tự tạo Client ID mới tại Google Cloud, cấu hình các Redirect URIs như trên, sau đó thiết lập biến môi trường <strong className="font-mono text-slate-700 dark:text-slate-300">VITE_GOOGLE_CLIENT_ID</strong> trong phần <strong>Settings &rarr; Environment Variables</strong> của AI Studio để ứng dụng tự động nhận cấu hình riêng của bạn.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3 justify-end pt-3 border-t border-slate-100 dark:border-slate-800">
+            <button
+              onClick={() => { setShowOAuthConfigGuide(false); setCopiedText(null); }}
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
+            >
+              Tôi đã cấu hình xong - Thử lại
+            </button>
+          </div>
         </div>
       </div>
     )}
