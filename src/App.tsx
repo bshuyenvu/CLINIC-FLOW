@@ -29,7 +29,9 @@ import {
   BookOpen,
   Copy,
   Mail,
-  Lock
+  Lock,
+  Pencil,
+  FileText
 } from 'lucide-react';
 
 const DEFAULT_TASKS: Task[] = [
@@ -107,6 +109,10 @@ export default function App() {
     return localStorage.getItem('planner_dark_mode') === 'true';
   });
   const [showGuide, setShowGuide] = useState(false);
+
+  // Edit/delete schedule and tasks states
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editingScheduleItem, setEditingScheduleItem] = useState<ScheduleItem | null>(null);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -199,6 +205,47 @@ export default function App() {
       }
     } catch (err) {
       console.warn('Permission request error:', err);
+    }
+  };
+
+  const handleToggleNotifications = async () => {
+    if (isNotificationsEnabled) {
+      setIsNotificationsEnabled(false);
+      localStorage.setItem('planner_notifications_enabled', 'false');
+      setActiveToast({
+        title: "Đã tắt nhắc nhở 🔕",
+        message: "Bạn đã tắt âm thanh và cửa sổ thông báo nhịp sinh học tự động.",
+        type: "info"
+      });
+    } else {
+      if (typeof Notification !== 'undefined') {
+        if (Notification.permission === 'granted') {
+          setIsNotificationsEnabled(true);
+          localStorage.setItem('planner_notifications_enabled', 'true');
+          showLocalNotification('Thông báo được kích hoạt! 🔔', 'Bạn sẽ nhận được các nhắc nhở nhịp sinh học và công việc cá nhân.');
+          playChime();
+        } else if (Notification.permission === 'denied') {
+          setActiveToast({
+            title: "Quyền thông báo bị chặn 🚫",
+            message: "Bạn đã chặn quyền thông báo trên trình duyệt. Hãy cho phép trong cài đặt trình duyệt để nhận cửa sổ nhắc nhở nổi, hoặc chúng tôi sẽ dùng thông báo tạm thời trong ứng dụng.",
+            type: "warning"
+          });
+          setIsNotificationsEnabled(true);
+          localStorage.setItem('planner_notifications_enabled', 'true');
+          playChime();
+        } else {
+          await requestNotificationPermission();
+        }
+      } else {
+        setIsNotificationsEnabled(true);
+        localStorage.setItem('planner_notifications_enabled', 'true');
+        setActiveToast({
+          title: "Thông báo nổi không hỗ trợ 🔔",
+          message: "Trình duyệt của bạn không hỗ trợ Thông báo nổi, ứng dụng sẽ sử dụng âm thanh báo và thông báo tạm trong app.",
+          type: "info"
+        });
+        playChime();
+      }
     }
   };
 
@@ -696,6 +743,41 @@ export default function App() {
     handleOptimize(updatedTasks, preferences);
   };
 
+  const handleUpdateTask = (updatedTask: Task) => {
+    const updated = tasks.map(t => t.id === updatedTask.id ? updatedTask : t);
+    setTasks(updated);
+    setEditingTask(null);
+    handleOptimize(updated, preferences);
+    setActiveToast({
+      title: "Cập nhật công việc thành công! 📝",
+      message: `Công việc "${updatedTask.title}" đã được lưu chỉnh sửa và phân bổ lại lịch trình sinh học.`,
+      type: "success"
+    });
+  };
+
+  const handleUpdateScheduleItem = (updatedItem: ScheduleItem) => {
+    const updated = schedule.map(item => item.id === updatedItem.id ? updatedItem : item);
+    setSchedule(updated);
+    setEditingScheduleItem(null);
+    setActiveToast({
+      title: "Đã cập nhật lịch trình! ⏰",
+      message: `Hoạt động "${updatedItem.activity}" đã được cập nhật trực tiếp trên bảng phân bổ.`,
+      type: "success"
+    });
+  };
+
+  const handleDeleteScheduleItem = (itemId: string) => {
+    if (confirm('Bạn có chắc chắn muốn xóa hoạt động này khỏi lịch trình sinh học hôm nay?')) {
+      const updated = schedule.filter(item => item.id !== itemId);
+      setSchedule(updated);
+      setActiveToast({
+        title: "Đã xóa khỏi lịch trình! 🗑️",
+        message: "Hoạt động đã được gỡ bỏ trực tiếp khỏi lịch trình hôm nay.",
+        type: "success"
+      });
+    }
+  };
+
   const handleUpdatePreferences = (newPrefs: UserPreferences) => {
     setPreferences(newPrefs);
     handleOptimize(tasks, newPrefs);
@@ -1169,7 +1251,7 @@ export default function App() {
       <div class="footer-left">
         <p><strong>🏥 Clinic Flow Lifestyle Medicine Alliance</strong></p>
         <p>Hệ thống hỗ trợ lập phác đồ tự động và điều chỉnh thói quen chuẩn lâm sàng.</p>
-        <p>Website: www.clinicflow.com • Email: support@clinicflow.com</p>
+        <p>Webapp phát triển bởi Dr Huyền Vũ • Email: bshuyenvuvl@gmail.com</p>
       </div>
       <div class="footer-right" style="text-align: right;">
         <p><strong>TÀI LIỆU Y KHOA NỘI BỘ</strong></p>
@@ -1335,6 +1417,17 @@ export default function App() {
               <Calendar className="w-4 h-4 text-emerald-500" />
               Đăng nhập nhanh với Google
             </button>
+
+            {/* Google Unverified Warning Assistant Card */}
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/30 text-[10px] text-amber-800 dark:text-amber-450 rounded-xl space-y-1">
+              <p className="font-bold flex items-center gap-1">
+                ⚠️ Hướng dẫn vượt qua cảnh báo Google:
+              </p>
+              <p className="leading-relaxed">
+                Do ứng dụng đang ở chế độ thử nghiệm (Development), Google sẽ hiển thị màn hình <strong>"Google chưa xác minh ứng dụng này"</strong>. 
+                Hãy bấm vào <strong>"Nâng cao" (Advanced)</strong> ở góc dưới, sau đó bấm tiếp <strong>"Đi tới Clinic Flow (không an toàn)"</strong> để tiếp tục đăng nhập bình thường & an toàn tuyệt đối.
+              </p>
+            </div>
 
             <div className="text-center pt-2.5 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between">
               <p className="text-[9px] text-slate-400">© Clinic Flow Lifestyle Medicine</p>
@@ -1544,9 +1637,9 @@ export default function App() {
           <TaskForm onAddTask={handleAddTask} />
 
           {/* Task Optimization & Management Menu */}
-          <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-3.5 print:hidden">
+          <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 space-y-3.5 print:hidden">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest block flex items-center gap-1">
+              <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-widest block flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5 text-indigo-500" /> Menu Tối ưu hoàn thành
               </span>
             </div>
@@ -1563,7 +1656,7 @@ export default function App() {
                   }
                 }}
                 disabled={tasks.length === 0 || tasks.every(t => t.completed)}
-                className="py-1.5 px-2 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-40 text-indigo-700 font-semibold rounded-lg text-[10px] transition-all cursor-pointer text-center flex items-center justify-center gap-1"
+                className="py-1.5 px-2 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 disabled:opacity-40 text-indigo-700 dark:text-indigo-300 font-semibold rounded-lg text-[10px] transition-all cursor-pointer text-center flex items-center justify-center gap-1"
                 id="mark-all-completed-btn"
               >
                 Xong tất cả
@@ -1576,7 +1669,7 @@ export default function App() {
                   handleOptimize(updated, preferences);
                 }}
                 disabled={tasks.length === 0 || tasks.every(t => !t.completed)}
-                className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-700 font-semibold rounded-lg text-[10px] transition-all cursor-pointer text-center flex items-center justify-center gap-1"
+                className="py-1.5 px-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 text-slate-700 dark:text-slate-300 font-semibold rounded-lg text-[10px] transition-all cursor-pointer text-center flex items-center justify-center gap-1"
                 id="mark-all-incomplete-btn"
               >
                 Chưa xong tất cả
@@ -1593,7 +1686,7 @@ export default function App() {
                     handleOptimize(remaining, preferences);
                   }
                 }}
-                className="w-full py-1.5 px-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold rounded-lg text-[10px] transition-all cursor-pointer text-center flex items-center justify-center gap-1"
+                className="w-full py-1.5 px-2 bg-rose-50 dark:bg-rose-950/25 hover:bg-rose-100 dark:hover:bg-rose-900/30 text-rose-600 dark:text-rose-400 font-semibold rounded-lg text-[10px] transition-all cursor-pointer text-center flex items-center justify-center gap-1"
                 id="clear-completed-btn"
               >
                 <Trash2 className="w-3 h-3" /> Xóa công việc đã xong
@@ -1601,13 +1694,13 @@ export default function App() {
             )}
 
             {/* Schedule Completion Display Behavior Toggle */}
-            <div className="pt-2.5 border-t border-slate-200/60 space-y-1.5">
+            <div className="pt-2.5 border-t border-slate-200/60 dark:border-slate-800 space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-slate-600">Giữ việc đã xong trong lịch trình</span>
+                <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400">Giữ việc đã xong trong lịch trình</span>
                 <button
                   onClick={handleToggleShowCompletedInSchedule}
                   className={`w-9 h-5 rounded-full p-0.5 transition-all cursor-pointer relative ${
-                    preferences.showCompletedInSchedule !== false ? 'bg-emerald-500' : 'bg-slate-300'
+                    preferences.showCompletedInSchedule !== false ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
                   }`}
                   id="toggle-schedule-completed-view"
                   title="Bật: Việc đã xong vẫn giữ vị trí trong lịch sinh học. Tắt: Lịch trình tự sắp xếp lại dồn việc chưa xong lên trước."
@@ -1617,7 +1710,7 @@ export default function App() {
                   }`} />
                 </button>
               </div>
-              <p className="text-[9px] text-slate-400 leading-normal">
+              <p className="text-[9px] text-slate-400 dark:text-slate-500 leading-normal">
                 {preferences.showCompletedInSchedule !== false 
                   ? '✓ Các việc đã hoàn thành sẽ giữ nguyên vị trí trong lịch sinh học hôm nay.' 
                   : '🕒 Lịch trình tự sắp xếp lại, dồn các việc chưa xong lên trước.'}
@@ -1648,11 +1741,11 @@ export default function App() {
             </div>
 
             {/* Filter Tabs */}
-            <div className="flex bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold text-slate-600 gap-0.5">
+            <div className="flex bg-slate-100 dark:bg-slate-950 p-0.5 rounded-lg text-[10px] font-bold text-slate-600 dark:text-slate-400 gap-0.5 border border-transparent dark:border-slate-800">
               <button
                 onClick={() => setTaskFilter('all')}
                 className={`flex-1 py-1 rounded-md transition-all cursor-pointer text-center ${
-                  taskFilter === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'hover:text-slate-900 text-slate-500'
+                  taskFilter === 'all' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs' : 'hover:text-slate-900 dark:hover:text-slate-100 text-slate-500 dark:text-slate-400'
                 }`}
                 id="filter-all-btn"
               >
@@ -1661,7 +1754,7 @@ export default function App() {
               <button
                 onClick={() => setTaskFilter('active')}
                 className={`flex-1 py-1 rounded-md transition-all cursor-pointer text-center ${
-                  taskFilter === 'active' ? 'bg-white text-slate-900 shadow-xs' : 'hover:text-slate-900 text-slate-500'
+                  taskFilter === 'active' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs' : 'hover:text-slate-900 dark:hover:text-slate-100 text-slate-500 dark:text-slate-400'
                 }`}
                 id="filter-active-btn"
               >
@@ -1670,7 +1763,7 @@ export default function App() {
               <button
                 onClick={() => setTaskFilter('completed')}
                 className={`flex-1 py-1 rounded-md transition-all cursor-pointer text-center ${
-                  taskFilter === 'completed' ? 'bg-white text-slate-900 shadow-xs' : 'hover:text-slate-900 text-slate-500'
+                  taskFilter === 'completed' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs' : 'hover:text-slate-900 dark:hover:text-slate-100 text-slate-500 dark:text-slate-400'
                 }`}
                 id="filter-completed-btn"
               >
@@ -1680,7 +1773,7 @@ export default function App() {
 
             <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
               {tasks.length === 0 ? (
-                <div className="p-6 text-center border-2 border-dashed border-slate-100 rounded-xl text-slate-400 text-xs">
+                <div className="p-6 text-center border-2 border-dashed border-slate-100 dark:border-slate-800/80 rounded-xl text-slate-400 dark:text-slate-500 text-xs bg-slate-50/50 dark:bg-slate-900/30">
                   Danh sách trống. Hãy thêm nhiệm vụ đầu tiên của bạn ở trên để bắt đầu sắp xếp lịch làm việc!
                 </div>
               ) : tasks.filter(t => {
@@ -1688,7 +1781,7 @@ export default function App() {
                 if (taskFilter === 'completed') return t.completed;
                 return true;
               }).length === 0 ? (
-                <div className="p-6 text-center border-2 border-dashed border-slate-100 rounded-xl text-slate-400 text-xs">
+                <div className="p-6 text-center border-2 border-dashed border-slate-100 dark:border-slate-800/80 rounded-xl text-slate-400 dark:text-slate-500 text-xs bg-slate-50/50 dark:bg-slate-900/30">
                   Không tìm thấy nhiệm vụ nào phù hợp với bộ lọc hiện tại.
                 </div>
               ) : (
@@ -1743,8 +1836,16 @@ export default function App() {
                         {task.priority.toUpperCase()}
                       </span>
                       <button
+                        onClick={() => setEditingTask(task)}
+                        className="text-slate-400 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700/85 border border-slate-100 dark:border-slate-800 transition-all cursor-pointer flex items-center justify-center hover:scale-105 active:scale-95"
+                        title="Sửa công việc"
+                        id={`edit-task-${task.id}`}
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                      <button
                         onClick={() => handleDeleteTask(task.id)}
-                        className="text-slate-300 hover:text-rose-600 p-1 rounded hover:bg-rose-50 transition-all opacity-0 group-hover:opacity-100 cursor-pointer"
+                        className="text-slate-400 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-450 p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-slate-700/85 border border-slate-100 dark:border-slate-800 transition-all cursor-pointer flex items-center justify-center hover:scale-105 active:scale-95"
                         title="Xóa công việc"
                         id={`delete-task-${task.id}`}
                       >
@@ -1777,11 +1878,11 @@ export default function App() {
 
           <div className="flex gap-2">
             <button
-              onClick={requestNotificationPermission}
+              onClick={handleToggleNotifications}
               className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer border transition-all ${
                 isNotificationsEnabled
-                  ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-250 hover:bg-slate-50 dark:hover:bg-slate-700'
-                  : 'bg-indigo-600 border-indigo-600 hover:bg-indigo-700 text-white shadow-sm'
+                  ? 'bg-white dark:bg-slate-850 border-slate-200 dark:border-slate-750 text-slate-700 dark:text-slate-250 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  : 'bg-indigo-600 border-indigo-600 hover:bg-indigo-700 text-white shadow-sm shadow-indigo-100 dark:shadow-none'
               }`}
               id="enable-notification-btn"
             >
@@ -2088,6 +2189,8 @@ export default function App() {
                         item={item} 
                         onToggleTask={handleToggleTask} 
                         isCompleted={isCompleted} 
+                        onEditSchedule={setEditingScheduleItem}
+                        onDeleteSchedule={handleDeleteScheduleItem}
                       />
                     );
                   })
@@ -2114,6 +2217,8 @@ export default function App() {
                         item={item} 
                         onToggleTask={handleToggleTask} 
                         isCompleted={isCompleted} 
+                        onEditSchedule={setEditingScheduleItem}
+                        onDeleteSchedule={handleDeleteScheduleItem}
                       />
                     );
                   })
@@ -2140,6 +2245,8 @@ export default function App() {
                         item={item} 
                         onToggleTask={handleToggleTask} 
                         isCompleted={isCompleted} 
+                        onEditSchedule={setEditingScheduleItem}
+                        onDeleteSchedule={handleDeleteScheduleItem}
                       />
                     );
                   })
@@ -2192,6 +2299,288 @@ export default function App() {
         )}
       </main>
     </div>
+
+    {/* EDIT TASK MODAL */}
+    {editingTask && (
+      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center z-50 p-4 animate-fadeIn" id="edit-task-modal">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 p-6 shadow-2xl w-full max-w-lg space-y-4">
+          <div className="flex justify-between items-center pb-3 border-b border-gray-100 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg text-indigo-600 dark:text-indigo-400">
+                <Pencil className="w-5 h-5" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Chỉnh sửa Công Việc</h3>
+            </div>
+            <button
+              onClick={() => setEditingTask(null)}
+              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer text-sm font-semibold p-1"
+            >
+              Đóng
+            </button>
+          </div>
+
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            handleUpdateTask(editingTask);
+          }} className="space-y-4">
+            {/* Task Title */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">
+                Tên công việc <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={editingTask.title}
+                onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
+                className="w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100"
+              />
+            </div>
+
+            {/* Duration and Deadline */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-gray-400" /> Thời lượng (phút)
+                </label>
+                <input
+                  type="number"
+                  required
+                  value={editingTask.duration}
+                  onChange={(e) => setEditingTask({ ...editingTask, duration: Number(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-gray-400" /> Hạn chót
+                </label>
+                <input
+                  type="date"
+                  value={editingTask.deadline}
+                  onChange={(e) => setEditingTask({ ...editingTask, deadline: e.target.value })}
+                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100 cursor-pointer"
+                />
+              </div>
+            </div>
+
+            {/* Priority and Category */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5 flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5 text-gray-400" /> Độ ưu tiên
+                </label>
+                <div className="flex gap-1 bg-gray-50 dark:bg-slate-800/55 p-1 rounded-xl border border-gray-200 dark:border-slate-700">
+                  {(['low', 'medium', 'high'] as const).map((p) => {
+                    const label = p === 'high' ? 'Cao' : p === 'medium' ? 'Vừa' : 'Thấp';
+                    const activeClasses = 
+                      p === 'high' ? 'bg-rose-500 text-white shadow-sm' :
+                      p === 'medium' ? 'bg-amber-500 text-white shadow-sm' :
+                      'bg-emerald-500 text-white shadow-sm';
+                    
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setEditingTask({ ...editingTask, priority: p })}
+                        className={`flex-1 py-1 px-1.5 text-xs font-medium rounded-lg transition-all ${
+                          editingTask.priority === p ? activeClasses : 'text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-250'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 flex items-center gap-1">
+                  <Briefcase className="w-3.5 h-3.5 text-gray-400" /> Chủ đề / Nhóm
+                </label>
+                <select
+                  value={editingTask.category}
+                  onChange={(e) => setEditingTask({ ...editingTask, category: e.target.value })}
+                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100 appearance-none cursor-pointer"
+                >
+                  <option value="Lâm sàng">🩺 Lâm sàng & Bệnh nhân</option>
+                  <option value="Công việc">💼 Hành chính / Nghiên cứu</option>
+                  <option value="Học tập">📚 Đào tạo liên tục / CME</option>
+                  <option value="Sức khỏe">🥗 Y học Lối sống / Tập luyện</option>
+                  <option value="Cá nhân">👤 Cá nhân</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 flex items-center gap-1">
+                <FileText className="w-3.5 h-3.5 text-gray-400" /> Ghi chú thêm
+              </label>
+              <textarea
+                rows={2}
+                value={editingTask.notes || ''}
+                onChange={(e) => setEditingTask({ ...editingTask, notes: e.target.value })}
+                className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100 resize-none"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setEditingTask(null)}
+                className="flex-1 py-2.5 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-semibold transition-all cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-xl text-sm font-semibold transition-all shadow-md cursor-pointer"
+              >
+                Lưu Thay Đổi
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
+
+    {/* EDIT SCHEDULE ITEM MODAL */}
+    {editingScheduleItem && (
+      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center z-50 p-4 animate-fadeIn" id="edit-schedule-modal">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 p-6 shadow-2xl w-full max-w-lg space-y-4">
+          <div className="flex justify-between items-center pb-3 border-b border-gray-100 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-amber-50 dark:bg-amber-950/40 rounded-lg text-amber-600 dark:text-amber-400">
+                <Clock className="w-5 h-5" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Điều Chỉnh Lịch Trình Chi Tiết</h3>
+            </div>
+            <button
+              onClick={() => setEditingScheduleItem(null)}
+              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer text-sm font-semibold p-1"
+            >
+              Đóng
+            </button>
+          </div>
+
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            handleUpdateScheduleItem(editingScheduleItem);
+          }} className="space-y-4">
+            {/* Activity Name */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">
+                Tên hoạt động <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={editingScheduleItem.activity}
+                onChange={(e) => setEditingScheduleItem({ ...editingScheduleItem, activity: e.target.value })}
+                className="w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100"
+              />
+            </div>
+
+            {/* Time Slot (Start & End Time) */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 flex items-center gap-1">
+                  Giờ bắt đầu (HH:MM)
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ví dụ: 08:00"
+                  pattern="^[0-2][0-9]:[0-5][0-9]$"
+                  value={editingScheduleItem.startTime}
+                  onChange={(e) => setEditingScheduleItem({ ...editingScheduleItem, startTime: e.target.value })}
+                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 flex items-center gap-1">
+                  Giờ kết thúc (HH:MM)
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ví dụ: 09:30"
+                  pattern="^[0-2][0-9]:[0-5][0-9]$"
+                  value={editingScheduleItem.endTime}
+                  onChange={(e) => setEditingScheduleItem({ ...editingScheduleItem, endTime: e.target.value })}
+                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100"
+                />
+              </div>
+            </div>
+
+            {/* Duration & Type */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">
+                  Thời lượng (phút)
+                </label>
+                <input
+                  type="number"
+                  required
+                  value={editingScheduleItem.duration}
+                  onChange={(e) => setEditingScheduleItem({ ...editingScheduleItem, duration: Number(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">
+                  Phân loại
+                </label>
+                <select
+                  value={editingScheduleItem.type}
+                  onChange={(e) => setEditingScheduleItem({ ...editingScheduleItem, type: e.target.value as any })}
+                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100 appearance-none cursor-pointer"
+                >
+                  <option value="task">💼 Công việc chính</option>
+                  <option value="break">☕ Nghỉ giải lao</option>
+                  <option value="meal">🍲 Ăn uống</option>
+                  <option value="routine">✨ Thói quen lối sống</option>
+                  <option value="buffer">⏱️ Khoảng dự phòng</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">
+                Ghi chú / Hướng dẫn
+              </label>
+              <textarea
+                rows={2}
+                value={editingScheduleItem.description || ''}
+                onChange={(e) => setEditingScheduleItem({ ...editingScheduleItem, description: e.target.value })}
+                className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100 resize-none"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setEditingScheduleItem(null)}
+                className="flex-1 py-2.5 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-semibold transition-all cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-xl text-sm font-semibold transition-all shadow-md cursor-pointer"
+              >
+                Xác Nhận Thay Đổi
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
     </>
   );
 }
@@ -2200,11 +2589,15 @@ export default function App() {
 function ScheduleCard({ 
   item, 
   onToggleTask, 
-  isCompleted 
+  isCompleted,
+  onEditSchedule,
+  onDeleteSchedule
 }: { 
   item: ScheduleItem; 
   onToggleTask: (id: string) => void; 
   isCompleted?: boolean;
+  onEditSchedule?: (item: ScheduleItem) => void;
+  onDeleteSchedule?: (id: string) => void;
   key?: string;
 }) {
   // Styles depending on the slot type
@@ -2247,14 +2640,36 @@ function ScheduleCard({
   }
 
   return (
-    <div className={`p-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 rounded-xl transition-all hover:shadow-sm ${colorClass}`} id={`sched-item-${item.id}`}>
+    <div className={`p-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 rounded-xl transition-all hover:shadow-sm group ${colorClass}`} id={`sched-item-${item.id}`}>
       <div className="flex justify-between items-start gap-2 mb-1.5">
         <span className="text-[10px] font-extrabold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest flex items-center gap-1">
           <Clock className="w-3 h-3 text-indigo-500 dark:text-indigo-450" /> {item.timeSlot}
         </span>
-        <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${badgeColor}`}>
-          {badgeText}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${badgeColor}`}>
+            {badgeText}
+          </span>
+          {onEditSchedule && (
+            <button
+              onClick={() => onEditSchedule(item)}
+              className="text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700/85 border border-slate-100/50 dark:border-slate-800 transition-all cursor-pointer flex items-center justify-center hover:scale-105 active:scale-95 shadow-xs"
+              title="Chỉnh sửa hoạt động"
+              id={`edit-sched-btn-${item.id}`}
+            >
+              <Pencil className="w-3 h-3" />
+            </button>
+          )}
+          {onDeleteSchedule && (
+            <button
+              onClick={() => onDeleteSchedule(item.id)}
+              className="text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-450 p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-slate-700/85 border border-slate-100/50 dark:border-slate-800 transition-all cursor-pointer flex items-center justify-center hover:scale-105 active:scale-95 shadow-xs"
+              title="Xóa hoạt động khỏi lịch"
+              id={`delete-sched-btn-${item.id}`}
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       </div>
 
       <h4 className={`text-sm font-bold break-words flex items-center gap-1.5 ${isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-100'}`}>
