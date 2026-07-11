@@ -31,7 +31,8 @@ import {
   Mail,
   Lock,
   Pencil,
-  FileText
+  FileText,
+  LogOut
 } from 'lucide-react';
 
 const DEFAULT_TASKS: Task[] = [
@@ -565,10 +566,33 @@ export default function App() {
       setDriveErrorMessage(null);
       setShowCalendarPrompt(false);
       
+      // Reset tasks and preferences to default initial values
+      setTasks(DEFAULT_TASKS);
+      setPreferences(DEFAULT_PREFERENCES);
+      
+      // Clear localStorage cache for both guest and specific users to ensure pristine default state
+      localStorage.removeItem('planner_tasks');
+      localStorage.removeItem('planner_preferences');
+      localStorage.removeItem('planner_tasks_guest');
+      localStorage.removeItem('planner_preferences_guest');
+      if (user) {
+        localStorage.removeItem(`planner_tasks_${user.uid}`);
+        localStorage.removeItem(`planner_preferences_${user.uid}`);
+      }
+      
+      // Re-optimize with fresh defaults
+      handleOptimize(DEFAULT_TASKS, DEFAULT_PREFERENCES);
+
       // Reset floating form states
       setEmailInput('');
       setPasswordInput('');
       setIsOfflineMode(false);
+
+      setActiveToast({
+        title: "Đã đăng xuất tài khoản! 🚪",
+        message: "Hệ thống đã được khôi phục về phác đồ sinh học và cài đặt mặc định ban đầu.",
+        type: "info"
+      });
     } catch (err: any) {
       console.error('Logout error:', err);
     }
@@ -1575,6 +1599,26 @@ export default function App() {
           </div>
         </div>
 
+        {user && (
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800/80 rounded-2xl flex items-center justify-between gap-3 animate-fadeIn">
+            <div className="space-y-0.5 min-w-0">
+              <p className="text-[9px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-widest block">Tài khoản kết nối</p>
+              <p className="text-xs font-bold text-slate-700 dark:text-slate-350 truncate" title={user.email}>
+                {user.email}
+              </p>
+            </div>
+            <button
+              onClick={handleGoogleLogout}
+              className="px-2.5 py-1 bg-rose-50 dark:bg-rose-950/45 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-450 rounded-lg text-[9px] font-bold transition-all cursor-pointer shrink-0 border border-rose-100/30 dark:border-rose-950/30 flex items-center gap-1 hover:scale-105 active:scale-95 animate-pulse"
+              id="sidebar-logout-btn"
+              title="Đăng xuất tài khoản để khôi phục mặc định"
+            >
+              <LogOut className="w-3 h-3" />
+              Đăng xuất
+            </button>
+          </div>
+        )}
+
         {isOfflineMode && (
           <div className="p-3.5 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-100/50 dark:border-amber-900/30 rounded-2xl flex items-center justify-between gap-3 animate-fadeIn">
             <div className="space-y-0.5">
@@ -1970,11 +2014,12 @@ export default function App() {
 
                 <button
                   onClick={handleGoogleLogout}
-                  className="p-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-400 dark:text-slate-500 hover:text-rose-650 transition-all cursor-pointer"
+                  className="px-3 py-2 border border-rose-200 dark:border-rose-900/30 rounded-xl bg-rose-50/50 dark:bg-rose-950/20 hover:bg-rose-100/50 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer hover:scale-105 active:scale-95"
                   title={`Đăng xuất khỏi ${user.email}`}
                   id="logout-calendar-btn"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <LogOut className="w-3.5 h-3.5" />
+                  Đăng xuất
                 </button>
               </div>
             ) : (
