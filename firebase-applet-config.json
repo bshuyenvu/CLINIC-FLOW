@@ -1,10 +1,10 @@
 {
-  "projectId": "clinic-flow-planner",
-  "appId": "1:418544211221:web:02bcbc8268ea861305851c",
-  "apiKey": "AIzaSyBeSeG_4dPF2k1XZ62TcwqYpI07iCuTekQ",
-  "authDomain": "clinic-flow-planner.firebaseapp.com",
-  "storageBucket": "clinic-flow-planner.firebasestorage.app",
-  "messagingSenderId": "418544211221",
-  "measurementId": "G-273P6Y2SFX",
+  "projectId": "gen-lang-client-0459601012",
+  "appId": "1:478860569518:web:b7aa72eb199380d2e5363f",
+  "apiKey": "AIzaSyDyAo-Ef0mo7dw5BqW8THcJlxbHc7_IUFA",
+  "authDomain": "gen-lang-client-0459601012.firebaseapp.com",
+  "storageBucket": "gen-lang-client-0459601012.firebasestorage.app",
+  "messagingSenderId": "478860569518",
+  "measurementId": "",
   "oAuthClientId": "478860569518-kn1ugdqjedl9f9vmj94podev7o9r5rea.apps.googleusercontent.com"
 }
