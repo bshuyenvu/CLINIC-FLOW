@@ -1,0 +1,8 @@
+{
+  "name": "Lập Lịch Hàng Ngày",
+  "description": "Lập lịch trình chi tiết sáng, chiều, tối kèm thời gian nghỉ và tối ưu hóa thông minh danh sách công việc.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
