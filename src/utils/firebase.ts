@@ -179,7 +179,47 @@ export async function exportDatabaseToDrive(
   userEmail: string
 ): Promise<{ success: boolean; fileId?: string; error?: string }> {
   try {
-    const folderId = '1ulzGIP_-_nul_QurZJHl4hFmoH7EALzs';
+    // Dynamically look for or create a folder named "Clinic Flow Backup" in the user's personal Google Drive
+    let folderId = 'root';
+    try {
+      const searchResponse = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=name='Clinic Flow Backup' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id)`,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          }
+        }
+      );
+      if (searchResponse.ok) {
+        const searchData = await searchResponse.json();
+        if (searchData.files && searchData.files.length > 0) {
+          folderId = searchData.files[0].id;
+        } else {
+          // Create the folder if it does not exist
+          const createResponse = await fetch(
+            'https://www.googleapis.com/drive/v3/files',
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                name: 'Clinic Flow Backup',
+                mimeType: 'application/vnd.google-apps.folder',
+              }),
+            }
+          );
+          if (createResponse.ok) {
+            const createData = await createResponse.json();
+            folderId = createData.id;
+          }
+        }
+      }
+    } catch (folderError) {
+      console.error('Lỗi khi tìm hoặc tạo thư mục sao lưu, sẽ lưu ở thư mục gốc:', folderError);
+    }
+
     const fileName = `clinic_flow_backup_${userEmail.replace(/[@.]/g, '_')}_${new Date().toISOString().slice(0, 10)}.json`;
     
     const metadata = {
