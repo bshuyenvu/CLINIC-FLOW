@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Task, ScheduleItem, OptimizationSuggestion, UserPreferences } from './types';
 import TaskForm from './components/TaskForm';
 import PreferencesForm from './components/PreferencesForm';
-import { localScheduler } from './utils/scheduler';
+import { localScheduler, timeToMinutes, minutesToTime } from './utils/scheduler';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { initAuth, googleSignIn, logout, exportScheduleToCalendar, getUserData, saveUserData, exportDatabaseToDrive, loginWithEmail, registerWithEmail } from './utils/firebase';
 import {
@@ -784,23 +784,64 @@ export default function App() {
   };
 
   const handleUpdateScheduleItem = (updatedItem: ScheduleItem) => {
-    const updated = schedule.map(item => item.id === updatedItem.id ? updatedItem : item);
+    // 1. Calculate duration based on startTime and endTime safely
+    const startMins = timeToMinutes(updatedItem.startTime);
+    let endMins = timeToMinutes(updatedItem.endTime);
+    if (endMins < startMins) {
+      endMins += 1440; // overnight wrap
+    }
+    const computedDuration = endMins - startMins;
+
+    const updatedWithTimeSlot: ScheduleItem = {
+      ...updatedItem,
+      timeSlot: `${updatedItem.startTime} - ${updatedItem.endTime}`,
+      duration: computedDuration > 0 ? computedDuration : updatedItem.duration
+    };
+
+    // 2. Map updated item into schedule list
+    const updated = schedule.map(item => item.id === updatedItem.id ? updatedWithTimeSlot : item);
     setSchedule(updated);
+
+    // 3. Sync changes back to underlying task in the task list if applicable
+    if (updatedItem.type === 'task' && updatedItem.taskId) {
+      const updatedTasks = tasks.map(t => {
+        if (t.id === updatedItem.taskId) {
+          return {
+            ...t,
+            title: updatedItem.activity,
+            startTime: updatedItem.startTime,
+            endTime: updatedItem.endTime,
+            notes: updatedItem.description || t.notes
+          };
+        }
+        return t;
+      });
+      setTasks(updatedTasks);
+    }
+
     setEditingScheduleItem(null);
     setActiveToast({
       title: "Đã cập nhật lịch trình! ⏰",
-      message: `Hoạt động "${updatedItem.activity}" đã được cập nhật trực tiếp trên bảng phân bổ.`,
+      message: `Hoạt động "${updatedItem.activity}" đã được cập nhật và đồng bộ với danh sách công việc.`,
       type: "success"
     });
   };
 
   const handleDeleteScheduleItem = (itemId: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa hoạt động này khỏi lịch trình sinh học hôm nay?')) {
+      const itemToDelete = schedule.find(item => item.id === itemId);
+      
+      // If it is a task and has a taskId, delete it from the task list too
+      if (itemToDelete && itemToDelete.type === 'task' && itemToDelete.taskId) {
+        const updatedTasks = tasks.filter(t => t.id !== itemToDelete.taskId);
+        setTasks(updatedTasks);
+      }
+
       const updated = schedule.filter(item => item.id !== itemId);
       setSchedule(updated);
       setActiveToast({
         title: "Đã xóa khỏi lịch trình! 🗑️",
-        message: "Hoạt động đã được gỡ bỏ trực tiếp khỏi lịch trình hôm nay.",
+        message: "Hoạt động đã được gỡ bỏ và đồng bộ khỏi danh sách hôm nay.",
         type: "success"
       });
     }
@@ -818,10 +859,13 @@ export default function App() {
     const evening: ScheduleItem[] = [];
 
     schedule.forEach(item => {
-      const startHour = parseInt(item.startTime.split(':')[0], 10);
-      if (startHour < 12) {
+      const startTimeStr = item.startTime || '08:00';
+      const parts = startTimeStr.split(':');
+      const startHour = parts.length > 0 ? parseInt(parts[0], 10) : 8;
+      const validHour = isNaN(startHour) ? 8 : startHour;
+      if (validHour < 12) {
         morning.push(item);
-      } else if (startHour >= 12 && startHour < 18) {
+      } else if (validHour >= 12 && validHour < 18) {
         afternoon.push(item);
       } else {
         evening.push(item);
@@ -2558,31 +2602,27 @@ export default function App() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 flex items-center gap-1">
-                  Giờ bắt đầu (HH:MM)
+                  Giờ bắt đầu
                 </label>
                 <input
-                  type="text"
+                  type="time"
                   required
-                  placeholder="Ví dụ: 08:00"
-                  pattern="^[0-2][0-9]:[0-5][0-9]$"
                   value={editingScheduleItem.startTime}
                   onChange={(e) => setEditingScheduleItem({ ...editingScheduleItem, startTime: e.target.value })}
-                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100"
+                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100 cursor-pointer"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 flex items-center gap-1">
-                  Giờ kết thúc (HH:MM)
+                  Giờ kết thúc
                 </label>
                 <input
-                  type="text"
+                  type="time"
                   required
-                  placeholder="Ví dụ: 09:30"
-                  pattern="^[0-2][0-9]:[0-5][0-9]$"
                   value={editingScheduleItem.endTime}
                   onChange={(e) => setEditingScheduleItem({ ...editingScheduleItem, endTime: e.target.value })}
-                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100"
+                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-gray-900 dark:text-slate-100 cursor-pointer"
                 />
               </div>
             </div>
