@@ -3,7 +3,7 @@ import { Task, ScheduleItem, OptimizationSuggestion, UserPreferences } from './t
 import TaskForm from './components/TaskForm';
 import PreferencesForm from './components/PreferencesForm';
 import { localScheduler, timeToMinutes, minutesToTime } from './utils/scheduler';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { initAuth, googleSignIn, logout, exportScheduleToCalendar, getUserData, saveUserData, exportDatabaseToDrive, loginWithEmail, registerWithEmail } from './utils/firebase';
 import {
   Calendar,
@@ -32,7 +32,12 @@ import {
   Lock,
   Pencil,
   FileText,
-  LogOut
+  LogOut,
+  History,
+  Eye,
+  BarChart3,
+  TrendingUp,
+  CalendarDays
 } from 'lucide-react';
 
 const DEFAULT_TASKS: Task[] = [
@@ -118,6 +123,22 @@ export default function App() {
   // Edit/delete schedule and tasks states
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editingScheduleItem, setEditingScheduleItem] = useState<ScheduleItem | null>(null);
+
+  const [activeSection, setActiveSection] = useState<'schedule' | 'history' | 'preview'>('schedule');
+  const [historyTab, setHistoryTab] = useState<'day' | 'week' | 'year'>('day');
+  const [previewTab, setPreviewTab] = useState<'day' | 'week' | 'year'>('day');
+  
+  // History Dates & Years
+  const [historyDate, setHistoryDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [historyYear, setHistoryYear] = useState<number>(() => new Date().getFullYear());
+  
+  // Preview Dates & Years
+  const [previewDate, setPreviewDate] = useState<string>(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
+  });
+  const [previewYear, setPreviewYear] = useState<number>(() => new Date().getFullYear());
 
   useEffect(() => {
     if (isDarkMode) {
@@ -850,6 +871,60 @@ export default function App() {
   const handleUpdatePreferences = (newPrefs: UserPreferences) => {
     setPreferences(newPrefs);
     handleOptimize(tasks, newPrefs);
+  };
+
+  const getWeekRange = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const day = date.getDay(); // 0 is Sunday, 1 is Monday, etc.
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1); // adjust when Sunday to start from Monday
+    const monday = new Date(date.setDate(diff));
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    return {
+      start: monday.toISOString().split('T')[0],
+      end: sunday.toISOString().split('T')[0]
+    };
+  };
+
+  const getDayCompletionData = () => {
+    const { start } = getWeekRange(historyDate);
+    const daysOfWeek = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'CN'];
+    const baseDate = new Date(start);
+    const data: { dayName: string; dateStr: string; completed: number; total: number; rate: number }[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(baseDate);
+      d.setDate(baseDate.getDate() + i);
+      const dStr = d.toISOString().split('T')[0];
+      const tks = tasks.filter(t => t.date === dStr);
+      const comp = tks.filter(t => t.completed).length;
+      const tot = tks.length;
+      data.push({
+        dayName: daysOfWeek[i],
+        dateStr: dStr,
+        completed: comp,
+        total: tot,
+        rate: tot > 0 ? Math.round((comp / tot) * 100) : 0
+      });
+    }
+    return data;
+  };
+
+  const getYearlyCompletionData = () => {
+    const monthsVi = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9', 'T10', 'T11', 'T12'];
+    const data: { monthName: string; completed: number; total: number; rate: number }[] = [];
+    for (let m = 0; m < 12; m++) {
+      const monthPrefix = `${historyYear}-${(m + 1).toString().padStart(2, '0')}`;
+      const tks = tasks.filter(t => t.date && t.date.startsWith(monthPrefix));
+      const comp = tks.filter(t => t.completed).length;
+      const tot = tks.length;
+      data.push({
+        monthName: monthsVi[m],
+        completed: comp,
+        total: tot,
+        rate: tot > 0 ? Math.round((comp / tot) * 100) : 0
+      });
+    }
+    return data;
   };
 
   // Divide schedule items into Sáng (Morning), Chiều (Afternoon), Tối (Evening)
@@ -2022,15 +2097,25 @@ export default function App() {
           <div>
             <div className="flex items-center gap-2 mb-1.5">
               <h2 className="text-3xl font-light text-slate-400 dark:text-slate-500">
-                Lịch trình <span className="text-slate-900 dark:text-white font-bold tracking-tight">Hôm nay</span>
+                {activeSection === 'schedule' ? (
+                  <>Lịch trình <span className="text-slate-900 dark:text-white font-bold tracking-tight">Hôm nay</span></>
+                ) : activeSection === 'history' ? (
+                  <>Lịch sử <span className="text-slate-900 dark:text-white font-bold tracking-tight">Công tác</span></>
+                ) : (
+                  <>Xem trước <span className="text-slate-900 dark:text-white font-bold tracking-tight">Phác đồ</span></>
+                )}
               </h2>
-              {isAiGenerated && (
+              {activeSection === 'schedule' && isAiGenerated && (
                 <span className="px-2 py-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-[9px] font-extrabold uppercase rounded-full flex items-center gap-1 shadow-sm shadow-indigo-100 dark:shadow-none animate-pulse">
                   <Sparkles className="w-2.5 h-2.5" /> AI Optimized
                 </span>
               )}
             </div>
-            <p className="text-sm text-slate-400 dark:text-slate-500 font-medium">{getFormattedDate()}</p>
+            <p className="text-sm text-slate-400 dark:text-slate-500 font-medium">
+              {activeSection === 'schedule' ? getFormattedDate() : 
+               activeSection === 'history' ? 'Phân tích báo cáo hiệu suất công việc' : 
+               'Kế hoạch phân bổ năng lượng nhịp sinh học'}
+            </p>
           </div>
 
           <div className="flex flex-wrap gap-2 shrink-0">
@@ -2098,15 +2183,17 @@ export default function App() {
             >
               <Download className="w-3.5 h-3.5 text-slate-500" /> In / Lưu PDF
             </button>
-            <button
-              onClick={() => handleOptimize(tasks, preferences)}
-              disabled={isLoading}
-              className="px-4 py-2 bg-slate-950 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 active:bg-slate-900 text-white rounded-xl text-xs font-semibold transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              id="optimize-btn"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} /> 
-              {isLoading ? 'Đang sắp xếp...' : 'Sắp xếp lại'}
-            </button>
+            {activeSection === 'schedule' && (
+              <button
+                onClick={() => handleOptimize(tasks, preferences)}
+                disabled={isLoading}
+                className="px-4 py-2 bg-slate-950 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 active:bg-slate-900 text-white rounded-xl text-xs font-semibold transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                id="optimize-btn"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} /> 
+                {isLoading ? 'Đang sắp xếp...' : 'Sắp xếp lại'}
+              </button>
+            )}
           </div>
         </header>
 
@@ -2189,8 +2276,47 @@ export default function App() {
           </div>
         )}
 
-        {/* PERFORMANCE METRICS & PIE CHART */}
-        {tasks.length > 0 && (
+        {/* Navigation Tabs for Main Panel */}
+        <div className="flex bg-slate-100 dark:bg-slate-900 p-1.5 rounded-2xl gap-1 mb-6 border border-slate-200/40 dark:border-slate-800/60 max-w-lg shrink-0 print:hidden">
+          <button
+            onClick={() => setActiveSection('schedule')}
+            className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              activeSection === 'schedule'
+                ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            Lịch sinh học
+          </button>
+          <button
+            onClick={() => setActiveSection('history')}
+            className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              activeSection === 'history'
+                ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <History className="w-4 h-4" />
+            Lịch sử công việc
+          </button>
+          <button
+            onClick={() => setActiveSection('preview')}
+            className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              activeSection === 'preview'
+                ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <Eye className="w-4 h-4" />
+            Xem trước kế hoạch
+          </button>
+        </div>
+
+        {activeSection === 'schedule' ? (
+          <>
+            {/* PERFORMANCE METRICS & PIE CHART */}
+            {tasks.length > 0 && (
           <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 mb-6 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-6 hover:shadow-md transition-all print:hidden">
             <div className="flex-grow space-y-2 text-center sm:text-left">
               <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center justify-center sm:justify-start gap-1.5">
@@ -2397,6 +2523,446 @@ export default function App() {
               </div>
             </div>
           </footer>
+        )}
+          </>
+        ) : activeSection === 'history' ? (
+          <div className="space-y-6 animate-fadeIn">
+            {/* History Header & Tab Selectors */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
+              <div className="flex flex-wrap bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200/40 dark:border-slate-700/60">
+                {(['day', 'week', 'year'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setHistoryTab(tab)}
+                    className={`py-1.5 px-4 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      historyTab === tab
+                        ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    {tab === 'day' ? 'Theo Ngày' : tab === 'week' ? 'Theo Tuần' : 'Theo Năm'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Date / Year Selection Controls */}
+              <div className="flex items-center gap-3">
+                {historyTab !== 'year' ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500 font-medium dark:text-slate-400">Chọn ngày:</span>
+                    <input
+                      type="date"
+                      value={historyDate}
+                      onChange={(e) => setHistoryDate(e.target.value)}
+                      className="px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-700 transition-all text-slate-800 dark:text-slate-200 cursor-pointer"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500 font-medium dark:text-slate-400">Chọn năm:</span>
+                    <select
+                      value={historyYear}
+                      onChange={(e) => setHistoryYear(Number(e.target.value))}
+                      className="px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-700 transition-all text-slate-800 dark:text-slate-200 cursor-pointer"
+                    >
+                      {[2024, 2025, 2026, 2027, 2028].map((y) => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Tab content rendering */}
+            {historyTab === 'day' ? (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Day Overview Stats Card */}
+                <div className="lg:col-span-1 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <BarChart3 className="w-5 h-5 text-indigo-500" />
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">Hiệu suất ngày</h4>
+                    </div>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">Báo cáo hoàn thành công tác và chỉ số sinh học</p>
+                  </div>
+
+                  {(() => {
+                    const dayTasks = tasks.filter(t => t.date === historyDate);
+                    const completed = dayTasks.filter(t => t.completed).length;
+                    const total = dayTasks.length;
+                    const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
+                    return (
+                      <div className="space-y-4 py-4 flex-1 flex flex-col justify-center">
+                        <div className="text-center">
+                          <p className="text-5xl font-extrabold text-indigo-600 dark:text-indigo-400">{rate}%</p>
+                          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">Hoàn tất ({completed}/{total})</p>
+                        </div>
+                        <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
+                          <div className="bg-emerald-500 h-full transition-all" style={{ width: `${rate}%` }}></div>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 italic text-center leading-relaxed">
+                          {rate === 100 ? 'Tuyệt vời! Ngày vàng hoàn thành 100% mục tiêu sức khỏe và chuyên môn.' :
+                           rate >= 66 ? 'Rất tốt! Hầu hết các nhiệm vụ trọng tâm đã được hoàn tất.' :
+                           rate >= 33 ? 'Đang tiến triển đều đặn. Cố gắng phân bổ năng lượng đều hơn.' :
+                           total > 0 ? 'Hãy kiên trì thực hiện để duy trì nhịp độ làm việc tốt.' : 'Không có công việc nào được tạo cho ngày này.'}
+                        </p>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Day Tasks Detail Timeline List */}
+                <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <CalendarDays className="w-5 h-5 text-indigo-500" />
+                    Chi tiết công việc ({historyDate})
+                  </h4>
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800 space-y-3 max-h-[380px] overflow-y-auto pr-2">
+                    {tasks.filter(t => t.date === historyDate).length === 0 ? (
+                      <div className="text-center py-12 text-slate-400 dark:text-slate-500 italic text-xs">
+                        Không tìm thấy dữ liệu hoạt động cho ngày {historyDate}.
+                      </div>
+                    ) : (
+                      tasks.filter(t => t.date === historyDate).map(t => (
+                        <div key={t.id} className="flex items-center justify-between py-3 gap-4 animate-fadeIn">
+                          <div className="flex items-start gap-3 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={t.completed}
+                              onChange={() => handleToggleTask(t.id)}
+                              className="w-4.5 h-4.5 rounded-md border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0 cursor-pointer mt-0.5"
+                            />
+                            <div className="min-w-0">
+                              <p className={`text-xs font-semibold text-slate-900 dark:text-slate-100 ${t.completed ? 'line-through text-slate-400 dark:text-slate-500' : ''}`}>{t.title}</p>
+                              <p className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1.5 mt-0.5 font-medium">
+                                <Clock className="w-3 h-3 text-slate-300" /> {t.startTime} - {t.endTime || 'K/S'}
+                                <span className="px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 rounded-md text-[9px] font-bold text-slate-500 dark:text-slate-400 ml-1">{t.category}</span>
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <button
+                            onClick={() => setEditingTask(t)}
+                            className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer shrink-0 transition-all"
+                            title="Chỉnh sửa công việc"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : historyTab === 'week' ? (
+              <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-6">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-indigo-500" />
+                    Biểu đồ tuần tự (Hiệu suất nhịp sinh học tuần này)
+                  </h4>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 font-medium mt-1">Tuần từ {getWeekRange(historyDate).start} đến {getWeekRange(historyDate).end}</p>
+                </div>
+
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={getDayCompletionData()}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? '#1e293b' : '#f1f5f9'} />
+                      <XAxis dataKey="dayName" stroke={isDarkMode ? '#64748b' : '#94a3b8'} fontSize={11} tickLine={false} />
+                      <YAxis stroke={isDarkMode ? '#64748b' : '#94a3b8'} fontSize={11} tickLine={false} domain={[0, 100]} tickFormatter={(val) => `${val}%`} />
+                      <Tooltip
+                        cursor={{ fill: isDarkMode ? 'rgba(30, 41, 59, 0.2)' : 'rgba(241, 245, 249, 0.4)' }}
+                        contentStyle={{
+                          fontSize: '11px',
+                          borderRadius: '8px',
+                          backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
+                          border: `1px solid ${isDarkMode ? '#1e293b' : '#e2e8f0'}`,
+                          color: isDarkMode ? '#f8fafc' : '#0f172a',
+                        }}
+                        formatter={(value: any, name: any, props: any) => [
+                          `${value}% (Xong ${props.payload.completed}/${props.payload.total} việc)`,
+                          'Tỷ lệ hoàn tất'
+                        ]}
+                      />
+                      <Bar dataKey="rate" fill="#6366f1" radius={[4, 4, 0, 0]} maxBarSize={32}>
+                        {getDayCompletionData().map((entry, index) => (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={entry.rate >= 80 ? '#10b981' : entry.rate >= 40 ? '#6366f1' : entry.total === 0 ? '#cbd5e1' : '#f59e0b'} 
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                  <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl space-y-1">
+                    <p className="text-[10px] text-slate-400 dark:text-emerald-500 uppercase font-extrabold tracking-wider">Ngày tốt nhất</p>
+                    {(() => {
+                      const data = getDayCompletionData();
+                      const max = data.reduce((prev, current) => (prev.rate > current.rate) ? prev : current, data[0]);
+                      return (
+                        <p className="text-lg font-extrabold text-emerald-700 dark:text-emerald-400">
+                          {max && max.total > 0 ? `${max.dayName} (${max.rate}%)` : 'N/A'}
+                        </p>
+                      );
+                    })()}
+                  </div>
+
+                  <div className="p-4 bg-indigo-50 dark:bg-indigo-950/20 rounded-xl space-y-1">
+                    <p className="text-[10px] text-slate-400 dark:text-indigo-500 uppercase font-extrabold tracking-wider">Hiệu suất trung bình</p>
+                    {(() => {
+                      const data = getDayCompletionData().filter(d => d.total > 0);
+                      const avg = data.length > 0 ? Math.round(data.reduce((sum, d) => sum + d.rate, 0) / data.length) : 0;
+                      return (
+                        <p className="text-lg font-extrabold text-indigo-700 dark:text-indigo-400">
+                          {avg}% hoàn thành
+                        </p>
+                      );
+                    })()}
+                  </div>
+
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl space-y-1">
+                    <p className="text-[10px] text-slate-400 dark:text-slate-450 uppercase font-extrabold tracking-wider">Tổng số công việc</p>
+                    <p className="text-lg font-extrabold text-slate-700 dark:text-slate-300">
+                      {getDayCompletionData().reduce((sum, d) => sum + d.total, 0)} nhiệm vụ
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-6">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-indigo-500" />
+                    Hiệu suất công tác năm {historyYear}
+                  </h4>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 font-medium mt-1">Đánh giá phân bổ nhiệm vụ theo tháng</p>
+                </div>
+
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={getYearlyCompletionData()}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? '#1e293b' : '#f1f5f9'} />
+                      <XAxis dataKey="monthName" stroke={isDarkMode ? '#64748b' : '#94a3b8'} fontSize={11} tickLine={false} />
+                      <YAxis stroke={isDarkMode ? '#64748b' : '#94a3b8'} fontSize={11} tickLine={false} domain={[0, 100]} tickFormatter={(val) => `${val}%`} />
+                      <Tooltip
+                        cursor={{ fill: isDarkMode ? 'rgba(30, 41, 59, 0.2)' : 'rgba(241, 245, 249, 0.4)' }}
+                        contentStyle={{
+                          fontSize: '11px',
+                          borderRadius: '8px',
+                          backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
+                          border: `1px solid ${isDarkMode ? '#1e293b' : '#e2e8f0'}`,
+                          color: isDarkMode ? '#f8fafc' : '#0f172a',
+                        }}
+                        formatter={(value: any, name: any, props: any) => [
+                          `${value}% (Xong ${props.payload.completed}/${props.payload.total} việc)`,
+                          'Tỷ lệ hoàn tất'
+                        ]}
+                      />
+                      <Bar dataKey="rate" fill="#4f46e5" radius={[4, 4, 0, 0]} maxBarSize={32}>
+                        {getYearlyCompletionData().map((entry, index) => (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={entry.rate >= 80 ? '#10b981' : entry.rate >= 40 ? '#4f46e5' : entry.total === 0 ? '#cbd5e1' : '#f59e0b'} 
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl">
+                  <h5 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-2 uppercase tracking-wider">Tổng quan kết quả lâm sàng & sinh học</h5>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+                    Theo thống kê năm {historyYear}, mức độ tuân thủ phác đồ của bạn chịu sự ảnh hưởng sâu sắc từ cách thức phân nhóm công việc chính vào đầu giờ sáng. Việc duy trì đều đặn các chu kỳ nghỉ ngơi xen kẽ giúp tối ưu hóa tổng thể tiến trình công tác lâu dài.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-6 animate-fadeIn">
+            {/* Preview Header & Tabs */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
+              <div className="flex flex-wrap bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200/40 dark:border-slate-700/60">
+                {(['day', 'week', 'year'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setPreviewTab(tab)}
+                    className={`py-1.5 px-4 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      previewTab === tab
+                        ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    {tab === 'day' ? 'Xem Trước Ngày' : tab === 'week' ? 'Xem Trước Tuần' : 'Chỉ Số Hướng Dẫn'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Selection Controls */}
+              <div className="flex items-center gap-3">
+                {previewTab !== 'year' ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500 font-medium dark:text-slate-400">Chọn ngày:</span>
+                    <input
+                      type="date"
+                      value={previewDate}
+                      onChange={(e) => setPreviewDate(e.target.value)}
+                      className="px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-700 transition-all text-slate-800 dark:text-slate-200 cursor-pointer"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500 font-medium dark:text-slate-400">Chọn năm:</span>
+                    <select
+                      value={previewYear}
+                      onChange={(e) => setPreviewYear(Number(e.target.value))}
+                      className="px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-700 transition-all text-slate-800 dark:text-slate-200 cursor-pointer"
+                    >
+                      {[2024, 2025, 2026, 2027, 2028].map((y) => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Tab content rendering */}
+            {previewTab === 'day' ? (
+              <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <CalendarDays className="w-5 h-5 text-indigo-500" />
+                    Kế hoạch năng lượng nhịp sinh học cho ngày {previewDate}
+                  </h4>
+                  <span className="px-2.5 py-0.5 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold rounded-full">
+                    Dự đoán
+                  </span>
+                </div>
+
+                <div className="divide-y divide-slate-100 dark:divide-slate-800 space-y-3 max-h-[380px] overflow-y-auto pr-2">
+                  {tasks.filter(t => t.date === previewDate).length === 0 ? (
+                    <div className="text-center py-12 text-slate-400 dark:text-slate-500 italic text-xs">
+                      Không có nhiệm vụ nào được lên kế hoạch cho ngày {previewDate}. Bạn có thể thêm nhiệm vụ mới để thiết lập lịch nhịp sinh học!
+                    </div>
+                  ) : (
+                    tasks.filter(t => t.date === previewDate).map(t => (
+                      <div key={t.id} className="flex items-center justify-between py-3 gap-4 animate-fadeIn">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1.5 ${
+                            t.priority === 'high' ? 'bg-rose-500' : t.priority === 'medium' ? 'bg-amber-400' : 'bg-emerald-400'
+                          }`} />
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">{t.title}</p>
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1.5 mt-0.5 font-medium">
+                              <Clock className="w-3 h-3 text-slate-300" /> {t.startTime} - {t.endTime || 'K/S'}
+                              <span className="px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 rounded-md text-[9px] font-bold text-slate-500 dark:text-slate-400 ml-1">{t.category}</span>
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <button
+                          onClick={() => setEditingTask(t)}
+                          className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer shrink-0 transition-all"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : previewTab === 'week' ? (
+              <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-6">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Compass className="w-5 h-5 text-indigo-500" />
+                    Kế hoạch năng lượng phân bổ tuần
+                  </h4>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 font-medium mt-1">Sơ đồ mật độ nhiệm vụ dự kiến trong tuần</p>
+                </div>
+
+                {(() => {
+                  const daysOfWeekVi = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ Nhật'];
+                  const baseDate = new Date(getWeekRange(previewDate).start);
+                  
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+                      {daysOfWeekVi.map((dayName, idx) => {
+                        const date = new Date(baseDate);
+                        date.setDate(baseDate.getDate() + idx);
+                        const dateStr = date.toISOString().split('T')[0];
+                        const dayTasks = tasks.filter(t => t.date === dateStr);
+                        const isToday = dateStr === new Date().toISOString().split('T')[0];
+                        
+                        return (
+                          <div 
+                            key={idx} 
+                            onClick={() => {
+                              setPreviewDate(dateStr);
+                              setPreviewTab('day');
+                            }}
+                            className={`p-3.5 border rounded-2xl flex flex-col justify-between gap-4 cursor-pointer hover:shadow-md transition-all ${
+                              isToday 
+                                ? 'bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-800/80 shadow-sm' 
+                                : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-850'
+                            }`}
+                          >
+                            <div>
+                              <p className="text-[10px] font-extrabold uppercase text-slate-400 dark:text-slate-500">{dayName}</p>
+                              <p className="text-xs font-bold text-slate-700 dark:text-slate-300 mt-0.5">{date.getDate()}/{date.getMonth() + 1}</p>
+                            </div>
+                            
+                            <div className="space-y-1.5">
+                              <p className="text-xl font-black text-slate-800 dark:text-slate-200">{dayTasks.length}</p>
+                              <p className="text-[9px] text-slate-500 dark:text-slate-400 font-medium">nhiệm vụ</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
+                  <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/30 text-rose-500 flex items-center justify-center font-bold text-lg">
+                    🩺
+                  </div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">Vệ sinh giấc ngủ</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+                    Để duy trì nồng độ cortisol tối ưu và nhịp sinh học lành mạnh, hãy ngắt thiết bị điện tử tối thiểu 60 phút trước khi ngủ. Thiết kế phác đồ cá nhân hóa để cơ thể phục hồi tối đa.
+                  </p>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/30 text-amber-500 flex items-center justify-center font-bold text-lg">
+                    ☀️
+                  </div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">Khung giờ vàng cortisol</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+                    Tận dụng thời gian từ 8:30 đến 11:30 sáng cho các công việc đòi hỏi sự tập trung chuyên sâu hoặc tư duy cao độ như viết báo cáo lâm sàng, nghiên cứu y văn chuyên khoa.
+                  </p>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-500 flex items-center justify-center font-bold text-lg">
+                    🏃
+                  </div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">Vận động khoa học</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+                    Phân bổ thời gian tập luyện vào khoảng 16:30 đến 18:30 chiều khi nhiệt độ cơ thể ở mức cao nhất, tối ưu hiệu quả tim mạch và thúc đẩy điều hòa chu kỳ sinh học.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </main>
     </div>
